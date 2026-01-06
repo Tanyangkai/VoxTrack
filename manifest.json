@@ -1,11 +1,11 @@
 {
-	"id": "sample-plugin",
-	"name": "Sample Plugin",
+	"id": "voxtrack",
+	"name": "VoxTrack",
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "Demonstrates some of the capabilities of the Obsidian API.",
-	"author": "Obsidian",
-	"authorUrl": "https://obsidian.md",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"description": "True-to-life TTS experience with high-precision text tracking and highlighting for Obsidian.",
+	"author": "Antigravity",
+	"authorUrl": "",
+	"fundingUrl": "",
 	"isDesktopOnly": false
 }
