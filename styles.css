@@ -1,8 +1,19 @@
 /*
-
-This CSS file will be included with your plugin, and
-available in the app when your plugin is enabled.
-
-If your plugin does not need CSS, delete this file.
-
+VoxTrack Highlight Styles
 */
+
+.voxtrack-active-word {
+    background-color: var(--text-selection);
+    color: var(--text-normal);
+    border-radius: 3px;
+    box-shadow: 0 0 0 2px var(--text-selection);
+}
+
+/* Optional: a more prominent style */
+.theme-dark .voxtrack-active-word {
+    background-color: rgba(255, 255, 0, 0.3);
+}
+
+.theme-light .voxtrack-active-word {
+    background-color: rgba(255, 255, 0, 0.4);
+}

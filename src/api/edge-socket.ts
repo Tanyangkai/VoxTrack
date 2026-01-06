@@ -1,69 +1,123 @@
 import { v4 as uuidv4 } from 'uuid';
-import WebSocket from 'ws';
 import { EDGE_TTS_URL } from './protocol';
 
 export class EdgeSocket {
     private ws: WebSocket | null = null;
-    private onMessageCallback: ((data: string | Buffer) => void) | null = null;
+    private onMessageCallback: ((data: string | Uint8Array) => void) | null = null;
+    private onCloseCallback: (() => void) | null = null;
+    private readonly TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
 
-    onMessage(callback: (data: string | Buffer) => void) {
+    onMessage(callback: (data: string | Uint8Array) => void) {
         this.onMessageCallback = callback;
     }
 
+    onClose(callback: () => void) {
+        this.onCloseCallback = callback;
+    }
+
+    private async generateSecMsGec(): Promise<string> {
+        const WIN_EPOCH = 11644473600n;
+        let ticks = BigInt(Math.floor(Date.now() / 1000));
+        ticks += WIN_EPOCH;
+        ticks -= ticks % 300n;
+        ticks *= 10000000n;
+
+        const strToHash = `${ticks}${this.TRUSTED_CLIENT_TOKEN}`;
+        const encoder = new TextEncoder();
+        const data = encoder.encode(strToHash);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+        return hashHex;
+    }
+
+    private getTimestamp(): string {
+        const date = new Date();
+        return date.toUTCString().replace("GMT", "GMT+0000 (Coordinated Universal Time)");
+    }
+
     async connect(): Promise<void> {
-        return new Promise((resolve, reject) => {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            return Promise.resolve();
+        }
+
+        try {
             const uuid = uuidv4().replace(/-/g, '');
-            const url = `${EDGE_TTS_URL}?TrustedClientToken=6A5AA1D4EAFF4E9FB37E23D68491D6F4`;
+            const secMsGec = await this.generateSecMsGec();
+            const url = `${EDGE_TTS_URL}?TrustedClientToken=${this.TRUSTED_CLIENT_TOKEN}&ConnectionId=${uuid}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=1-130.0.2849.68`;
 
+            return new Promise((resolve, reject) => {
+                this.ws = new WebSocket(url);
+                this.ws.binaryType = 'arraybuffer';
 
-            console.log('[VoxTrack] Connecting to Edge TTS...');
+                this.ws.onopen = () => {
+                    this.sendConfig();
+                    resolve();
+                };
 
-            // @ts-ignore - Explicitly using Node WebSocket
-            this.ws = new WebSocket(url, {
-                headers: {
-                    "Pragma": "no-cache",
-                    "Cache-Control": "no-cache",
-                    "Origin": "chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold",
-                    "Accept-Encoding": "gzip, deflate, br",
-                    "Accept-Language": "en-US,en;q=0.9",
-                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.77 Safari/537.36 Edg/91.0.864.41"
-                }
+                this.ws.onmessage = (ev: MessageEvent) => {
+                    console.debug('[VoxTrack] Raw message received:', typeof ev.data);
+                    if (this.onMessageCallback) {
+                        let data: string | Uint8Array;
+                        if (typeof ev.data === 'string') {
+                            data = ev.data;
+                        } else {
+                            data = new Uint8Array(ev.data as ArrayBuffer);
+                        }
+                        this.onMessageCallback(data);
+                    }
+                };
+
+                this.ws.onerror = (err) => {
+                    console.error('[VoxTrack] WebSocket Error', err);
+                    reject(err instanceof Error ? err : new Error("WebSocket connection failed"));
+                };
+
+                this.ws.onclose = () => {
+                    if (this.onCloseCallback) {
+                        this.onCloseCallback();
+                    }
+                    this.ws = null;
+                };
             });
-
-            this.ws!.addEventListener('open', () => {
-                console.log('[VoxTrack] WebSocket Connected');
-                this.sendConfig();
-                resolve();
-            });
-
-            this.ws!.addEventListener('message', (event: any) => {
-                if (this.onMessageCallback) {
-                    this.onMessageCallback(event.data);
-                }
-            });
-
-            this.ws!.addEventListener('error', (err: any) => {
-                console.error('[VoxTrack] WebSocket Error Event:', err);
-                if (err.error) console.error('[VoxTrack] Underlying Error:', err.error);
-                if (err.message) console.error('[VoxTrack] Error Message:', err.message);
-                reject(err);
-            });
-        });
+        } catch (error) {
+            return Promise.reject(error instanceof Error ? error : new Error(String(error)));
+        }
     }
 
     private sendConfig() {
         if (!this.ws) return;
-        // Basic configuration to enable WordBoundaries
-        const configMsg = `X-Timestamp:${new Date().toString()}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"true"},"outputFormat":"audio-24khz-48kbitrate-mono-mp3"}}}}\r\n`;
+        const config = {
+            context: {
+                synthesis: {
+                    audio: {
+                        metadataoptions: {
+                            sentenceBoundaryEnabled: false,
+                            wordBoundaryEnabled: true
+                        },
+                        outputFormat: "audio-24khz-48kbitrate-mono-mp3"
+                    }
+                }
+            }
+        };
+        // Ensure exact trailing newline for config message and send as string (Text Frame)
+        const configMsg = `X-Timestamp:${this.getTimestamp()}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n${JSON.stringify(config)}\r\n`;
         this.ws.send(configMsg);
     }
 
     async sendSSML(ssml: string, requestId: string): Promise<void> {
-        if (!this.ws) throw new Error("Socket not connected");
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) throw new Error("Socket not connected");
 
-        const timestamp = new Date().toString();
-        const msg = `X-RequestId: ${requestId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${timestamp}\r\nPath:ssml\r\n\r\n${ssml}`;
-
+        const timestamp = this.getTimestamp();
+        // Append 'Z' to timestamp as in original code, and send as string
+        const msg = `X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${timestamp}Z\r\nPath:ssml\r\n\r\n${ssml}`;
         this.ws.send(msg);
+    }
+
+    close(): void {
+        if (this.ws) {
+            this.ws.close();
+            this.ws = null;
+        }
     }
 }

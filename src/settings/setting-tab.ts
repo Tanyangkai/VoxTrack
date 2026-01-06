@@ -33,10 +33,12 @@ export class VoxTrackSettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
 
-        containerEl.createEl('h2', { text: 'VoxTrack TTS Settings' });
+        new Setting(containerEl)
+            .setName('Voice options')
+            .setHeading();
 
         new Setting(containerEl)
-            .setName('Voice Role')
+            .setName('Voice role')
             .setDesc('Select the capability of the speaker (e.g. Xiaoxiao, Yunxi)')
             .addText(text => text
                 .setPlaceholder('zh-CN-XiaoxiaoNeural')
@@ -47,7 +49,7 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
-            .setName('Rate')
+            .setName('Speech rate')
             .setDesc('Speech rate (e.g. +0%)')
             .addText(text => text
                 .setPlaceholder('+0%')
@@ -58,7 +60,7 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
-            .setName('Pitch')
+            .setName('Speech pitch')
             .setDesc('Speech pitch (e.g. +0Hz)')
             .addText(text => text
                 .setPlaceholder('+0Hz')
@@ -68,10 +70,12 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 }));
 
-        containerEl.createEl('h2', { text: 'Interaction' });
+        new Setting(containerEl)
+            .setName('Interaction')
+            .setHeading();
 
         new Setting(containerEl)
-            .setName('Auto Scroll')
+            .setName('Auto scroll')
             .setDesc('Automatically scroll the editor to follow the speech')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.autoScroll)
@@ -81,11 +85,11 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
-            .setName('Highlight Mode')
+            .setName('Highlight mode')
             .setDesc('Visual tracking granularity')
             .addDropdown(dropdown => dropdown
-                .addOption('word', 'Word Level')
-                .addOption('sentence', 'Sentence Level')
+                .addOption('word', 'Word level')
+                .addOption('sentence', 'Sentence level')
                 .addOption('none', 'None')
                 .setValue(this.plugin.settings.highlightMode)
                 .onChange(async (value) => {

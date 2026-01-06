@@ -8,7 +8,31 @@ export interface AudioMetadata {
     wordLength: number;
 }
 
-export function parseMetadata(data: any): AudioMetadata[] {
+interface EdgeMetadataData {
+    Offset?: number;
+    offset?: number;
+    Duration?: number;
+    duration?: number;
+    Text?: string;
+    text?: string | { Text?: string; text?: string; Word?: string; Offset?: number; offset?: number; TextOffset?: number; Length?: number; length?: number; WordLength?: number };
+    Word?: string;
+    Length?: number;
+    length?: number;
+    WordLength?: number;
+    TextOffset?: number;
+    [key: string]: any;
+}
+
+interface EdgeMetadataItem {
+    Type: string;
+    Data: EdgeMetadataData;
+}
+
+interface EdgeResponse {
+    Metadata?: EdgeMetadataItem[];
+}
+
+export function parseMetadata(data: EdgeResponse): AudioMetadata[] {
     const results: AudioMetadata[] = [];
 
     if (!data?.Metadata || !Array.isArray(data.Metadata)) {
@@ -18,13 +42,25 @@ export function parseMetadata(data: any): AudioMetadata[] {
     for (const item of data.Metadata) {
         if (item.Type === "WordBoundary" && item.Data) {
             const d = item.Data;
-            results.push({
-                offset: d.Offset,
-                duration: d.Duration,
-                text: d.text?.Text || "",
-                textOffset: d.text?.Offset || 0,
-                wordLength: d.text?.Length || 0
-            });
+            // The protocol is inconsistent. Check all known variations.
+            const audioOffset = d.Offset ?? d.offset ?? 0;
+            const audioDuration = d.Duration ?? d.duration ?? 0;
+            
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const textObj: any = d.text ?? d.Text ?? d; // Fallback to Data itself if flat
+            const word = (textObj.Text ?? textObj.text ?? textObj.Word ?? "") + "";
+            const textOffset = textObj.Offset ?? textObj.offset ?? textObj.TextOffset ?? 0;
+            const wordLength = textObj.Length ?? textObj.length ?? textObj.WordLength ?? word.length;
+            
+            if (word) {
+                results.push({
+                    offset: Number(audioOffset),
+                    duration: Number(audioDuration),
+                    text: word,
+                    textOffset: Number(textOffset),
+                    wordLength: Number(wordLength)
+                });
+            }
         }
     }
 
