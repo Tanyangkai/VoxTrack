@@ -16,7 +16,7 @@ export const activeWordField = StateField.define<DecorationSet>({
 
         for (const e of tr.effects) {
             if (e.is(setActiveRange)) {
-                if (e.value) {
+                if (e.value && e.value.from < e.value.to) {
                     decorations = Decoration.set([
                         activeWordMark.range(e.value.from, e.value.to)
                     ]);
