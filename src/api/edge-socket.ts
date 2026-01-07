@@ -63,7 +63,6 @@ export class EdgeSocket {
                 };
 
                 this.ws.onmessage = (ev: { data: any; type: string; target: WebSocket }) => {
-                    console.debug('[VoxTrack] Raw message received:', typeof ev.data);
                     if (this.onMessageCallback) {
                         let data: string | Uint8Array;
                         if (typeof ev.data === 'string') {

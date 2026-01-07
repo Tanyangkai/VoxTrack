@@ -20,7 +20,6 @@ export class AudioPlayer {
     }
 
     addChunk(data: Uint8Array) {
-        console.debug(`[VoxTrack] Received audio chunk: ${data.length} bytes`);
         this.queue.push(data);
         this.processQueue();
     }

@@ -64,6 +64,7 @@ Content`;
         expect(result[0]).not.toContain('http');
         expect(result[0]).not.toContain('Internal');
     });
+
     test('does not mistake currency in tables for math', () => {
         const input = `
 | Item | Price |
@@ -76,5 +77,29 @@ Content`;
         expect(result[0]).toContain('$1.00');
         expect(result[0]).toContain('$2.00');
     });
+
+    test('correctly processes complex Chinese tables', () => {
+        const input = `@[.obsidian/plugins/voxtrack]  关键词：**敢、快、狠、成、久、深**
+
+| 维度       | 典型表现                |
+| -------- | ------------------- |
+| **行动**   | 不犹豫，想到就做，执行速度远超常人   |
+| **意志**   | 目标明确，抗打击，有狠劲，持续推进   |
+| **风险承担** | 敢于冒风险，越阻越上，不怕失败     |
+| **能量输出** | 情绪强烈、存在感高，常有压迫性或冲击力 |
+| **突破常规** | 不按正常流程来，走非常规路线也敢走   |
+一流人才：
+·有强烈好奇心。`;
+
+        const result = processor.process(input, defaultOptions);
+        console.log('Processed Chinese Table:', JSON.stringify(result[0]));
+
+        // Should contain key content
+        expect(result[0]).toContain('行动');
+        expect(result[0]).toContain('不犹豫');
+        expect(result[0]).not.toContain('|'); // Should typically remove pipes
+        expect(result[0]).not.toContain('---'); // Should remove separators
+    });
+
 
 });

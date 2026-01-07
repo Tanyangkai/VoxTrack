@@ -133,7 +133,6 @@ export default class VoxTrackPlugin extends Plugin {
 				}
 			} else {
 				const text = new TextDecoder('utf-8').decode(buffer);
-				console.debug('[VoxTrack] Received text:', text);
 				if (text.includes('Path:audio.metadata')) {
 					const jsonStart = text.indexOf('\r\n\r\n');
 					if (jsonStart !== -1) {
@@ -157,7 +156,7 @@ export default class VoxTrackPlugin extends Plugin {
 		this.socket.onClose(() => {
 			if (this.isPlaying) {
 				if (this.isTransferFinished) {
-					console.debug('[VoxTrack] Socket closed normally after transfer');
+					// No log
 				} else {
 					console.warn('[VoxTrack] Socket closed unexpectedly');
 					new Notice('VoxTrack: Connection lost. Stopping playback.');
@@ -196,7 +195,7 @@ export default class VoxTrackPlugin extends Plugin {
 				// TTS sometimes adds punctuation like commas or periods that aren't in source
 				if (foundIndex === -1) {
 					const cleanWord = wordToFind.replace(/[.,;!?。，；！？、]/g, '');
-					if (cleanWord.length > 1 && cleanWord !== wordToFind) {
+					if (cleanWord.length > 0 && cleanWord !== wordToFind) {
 						foundIndex = docText.indexOf(cleanWord, currentDocOffset);
 						// Try case-insensitive specific clean word
 						if (foundIndex === -1) {
@@ -205,15 +204,35 @@ export default class VoxTrackPlugin extends Plugin {
 					}
 				}
 
+				// Fallback 3: Overshot Recovery
+				// If we can't find it forward, check if we skipped it (foundIndex would be < currentDocOffset but > baseOffset)
+				if (foundIndex === -1 && currentDocOffset > this.baseOffset) {
+					// Try searching from baseOffset to see if it's behind us
+					const recoveryIndex = docText.indexOf(wordToFind, this.baseOffset);
+					if (recoveryIndex !== -1 && recoveryIndex < currentDocOffset) {
+						foundIndex = recoveryIndex;
+					} else {
+						// Try fuzzy recovery
+						const cleanWord = wordToFind.replace(/[.,;!?。，；！？、]/g, '');
+						if (cleanWord.length > 0) {
+							const fuzzyRecoveryIndex = docText.indexOf(cleanWord, this.baseOffset);
+							if (fuzzyRecoveryIndex !== -1 && fuzzyRecoveryIndex < currentDocOffset) {
+								foundIndex = fuzzyRecoveryIndex;
+							}
+						}
+					}
+				}
+
 				if (foundIndex !== -1) {
-					// Sanity check: Don't jump too far ahead (e.g. 1000 chars) unless it's a long gap in audio
-					// But for now, trust it but log it
-					// console.debug(`[VoxTrack] Sync: Found "${wordToFind}" at ${foundIndex} (delta ${foundIndex - currentDocOffset})`);
-
 					const from = foundIndex;
-					// Use original word length if found exactly, otherwise might differ slightly but close enough for highlighting
-					const to = from + (docText.substring(from, from + wordToFind.length) === wordToFind ? wordToFind.length : wordToFind.replace(/[.,;!?。，；！？、]/g, '').length);
+					const cleanWord = wordToFind.replace(/[.,;!?。，；！？、]/g, '');
+					// Determine matched length logic
+					let matchLen = wordToFind.length;
+					if (docText.substring(from, from + wordToFind.length) !== wordToFind) {
+						matchLen = cleanWord.length;
+					}
 
+					const to = from + matchLen;
 					currentDocOffset = to;
 
 					const view = (this.activeEditor as any).cm || (this.activeEditor as any).editor?.cm || (this.activeEditor as any).view;
@@ -222,16 +241,16 @@ export default class VoxTrackPlugin extends Plugin {
 							effects: setActiveRange.of({ from, to }),
 							scrollIntoView: this.settings.autoScroll
 						};
-						
+
 						// If autoScroll is on, also move cursor to ensure Live Preview renders Source Mode for tables
 						if (this.settings.autoScroll) {
 							transaction.selection = { anchor: to };
 						}
-						
+
 						view.dispatch(transaction);
 					}
 				} else {
-					console.debug(`[VoxTrack] Sync: Could not find "${wordToFind}" after ${currentDocOffset}`);
+					console.warn(`[VoxTrack] Sync: Could not find "${wordToFind}" after ${currentDocOffset} (base: ${this.baseOffset})`);
 				}
 			}
 
@@ -250,7 +269,6 @@ export default class VoxTrackPlugin extends Plugin {
 
 			await this.sendChunk(nextText, statusBar);
 		} else {
-			console.debug('[VoxTrack] All chunks completed');
 			this.isTransferFinished = true;
 			this.player.finish();
 			this.socket.close();
@@ -277,7 +295,6 @@ export default class VoxTrackPlugin extends Plugin {
 
 		const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='${lang}'><voice name='${voice}'><prosody pitch='${pitch}' rate='${rate}' volume='${volume}'>${escapedText}</prosody></voice></speak>`;
 
-		console.debug(`[VoxTrack] Sending Chunk ${this.currentChunkIndex + 1}/${this.textChunks.length}: ${escapedText.substring(0, 50)}...`);
 		try {
 			await this.socket.sendSSML(ssml, uuidv4().replace(/-/g, ''));
 		} catch (error) {

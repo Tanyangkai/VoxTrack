@@ -91,7 +91,7 @@ export class TextProcessor {
     }
 
     private filterCommon(text: string): string {
-        return text.replace(/\|/g, ' ');
+        return text.replace(/\|/g, '\n');
     }
 
     private simplifyLinks(text: string): string {
