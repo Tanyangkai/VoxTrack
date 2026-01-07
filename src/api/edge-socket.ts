@@ -1,3 +1,4 @@
+import { WebSocket } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import { EDGE_TTS_URL } from './protocol';
 
@@ -36,7 +37,7 @@ export class EdgeSocket {
         return date.toUTCString().replace("GMT", "GMT+0000 (Coordinated Universal Time)");
     }
 
-    async connect(): Promise<void> {
+    async connect(retries = 3, delay = 1000): Promise<void> {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             return Promise.resolve();
         }
@@ -47,15 +48,21 @@ export class EdgeSocket {
             const url = `${EDGE_TTS_URL}?TrustedClientToken=${this.TRUSTED_CLIENT_TOKEN}&ConnectionId=${uuid}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=1-130.0.2849.68`;
 
             return new Promise((resolve, reject) => {
-                this.ws = new WebSocket(url);
+                this.ws = new WebSocket(url, {
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0',
+                        'Origin': 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold'
+                    }
+                });
                 this.ws.binaryType = 'arraybuffer';
 
                 this.ws.onopen = () => {
+                    console.debug('[VoxTrack] WebSocket connected successfully');
                     this.sendConfig();
                     resolve();
                 };
 
-                this.ws.onmessage = (ev: MessageEvent) => {
+                this.ws.onmessage = (ev: { data: any; type: string; target: WebSocket }) => {
                     console.debug('[VoxTrack] Raw message received:', typeof ev.data);
                     if (this.onMessageCallback) {
                         let data: string | Uint8Array;
@@ -68,9 +75,19 @@ export class EdgeSocket {
                     }
                 };
 
-                this.ws.onerror = (err) => {
-                    console.error('[VoxTrack] WebSocket Error', err);
-                    reject(err instanceof Error ? err : new Error("WebSocket connection failed"));
+                this.ws.onerror = async (err) => {
+                    console.error(`[VoxTrack] WebSocket Error (Retries left: ${retries})`, err);
+                    if (retries > 0) {
+                        console.log(`[VoxTrack] Retrying connection in ${delay}ms...`);
+                        this.ws = null;
+                        await new Promise(r => setTimeout(r, delay));
+                        // Retry with double the delay
+                        return this.connect(retries - 1, delay * 2)
+                            .then(resolve)
+                            .catch(reject);
+                    } else {
+                        reject(err instanceof Error ? err : new Error("WebSocket connection failed after retries"));
+                    }
                 };
 
                 this.ws.onclose = () => {

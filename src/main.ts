@@ -17,6 +17,7 @@ export default class VoxTrackPlugin extends Plugin {
 	private socket: EdgeSocket;
 	private textProcessor: TextProcessor;
 	private isPlaying: boolean = false;
+	private isPaused: boolean = false;
 	private isTransferFinished: boolean = false;
 	private hasShownReceivingNotice: boolean = false;
 	private activeEditor: Editor | null = null;
@@ -124,7 +125,11 @@ export default class VoxTrackPlugin extends Plugin {
 						this.hasShownReceivingNotice = true;
 					}
 					this.player.addChunk(new Uint8Array(audioData));
-					void this.player.play().catch(() => { });
+
+					// Only auto-play if we are logically "playing" and NOT "paused"
+					if (this.isPlaying && !this.isPaused) {
+						void this.player.play().catch(() => { });
+					}
 				}
 			} else {
 				const text = new TextDecoder('utf-8').decode(buffer);
@@ -249,7 +254,15 @@ export default class VoxTrackPlugin extends Plugin {
 
 	private async togglePlay(editor: Editor, mode: 'auto' | 'cursor', statusBar: HTMLElement) {
 		if (this.isPlaying) {
-			this.stopPlayback(statusBar);
+			if (this.isPaused) {
+				await this.player.play();
+				this.isPaused = false;
+				if (statusBar) statusBar.setText('VoxTrack: Playing...');
+			} else {
+				this.player.pause();
+				this.isPaused = true;
+				if (statusBar) statusBar.setText('VoxTrack: Paused');
+			}
 			return;
 		}
 
@@ -309,6 +322,7 @@ export default class VoxTrackPlugin extends Plugin {
 			if (statusBar) statusBar.setText('VoxTrack: Connecting...');
 			this.activeEditor = editor;
 			this.isPlaying = true;
+			this.isPaused = false;
 			this.isTransferFinished = false;
 			this.hasShownReceivingNotice = false;
 			this.baseOffset = startOffset;
@@ -336,6 +350,7 @@ export default class VoxTrackPlugin extends Plugin {
 
 	private stopPlayback(statusBar?: HTMLElement) {
 		this.isPlaying = false;
+		this.isPaused = false;
 		this.isTransferFinished = false;
 		if (this.syncInterval) cancelAnimationFrame(this.syncInterval);
 		this.player.stop();
@@ -357,6 +372,7 @@ export default class VoxTrackPlugin extends Plugin {
 
 	private handlePlaybackFinished(statusBar?: HTMLElement) {
 		this.isPlaying = false;
+		this.isPaused = false;
 		this.isTransferFinished = false;
 		if (this.syncInterval) cancelAnimationFrame(this.syncInterval);
 		this.syncController.reset();

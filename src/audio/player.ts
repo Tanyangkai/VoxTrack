@@ -34,7 +34,7 @@ export class AudioPlayer {
         return new Promise((resolve) => {
             this.mediaSource = new MediaSource();
             this.audio.src = URL.createObjectURL(this.mediaSource);
-            
+
             this.mediaSource.addEventListener('sourceopen', () => {
                 if (!this.sourceBuffer && this.mediaSource) {
                     this.sourceBuffer = this.mediaSource.addSourceBuffer('audio/mpeg');
@@ -59,7 +59,7 @@ export class AudioPlayer {
             const chunk = this.queue.shift();
             if (chunk) {
                 try {
-                    this.sourceBuffer.appendBuffer(chunk);
+                    this.sourceBuffer.appendBuffer(chunk as any);
                 } catch (e) {
                     console.error('[VoxTrack] Append failed', e);
                 }
@@ -75,7 +75,7 @@ export class AudioPlayer {
 
     async play(): Promise<void> {
         if (this.isPlaying) return;
-        
+
         try {
             await this.audio.play();
             this.isPlaying = true;
@@ -90,15 +90,22 @@ export class AudioPlayer {
         return this.audio.currentTime;
     }
 
+    pause(): void {
+        this.audio.pause();
+        this.isPlaying = false;
+    }
+
     stop(): void {
         this.audio.pause();
+        this.audio.removeAttribute('src');
+        this.audio.load(); // Force release of MediaSource
         this.audio.currentTime = 0;
         this.isPlaying = false;
         this.queue = [];
         if (this.mediaSource && this.mediaSource.readyState === 'open') {
             try {
                 this.mediaSource.endOfStream();
-            } catch (e) {}
+            } catch (e) { }
         }
     }
 
