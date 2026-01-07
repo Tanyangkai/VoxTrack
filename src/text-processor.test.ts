@@ -39,14 +39,15 @@ Content`;
     test('replaces symbols in English', () => {
         const input = '3 < 5 and a >= b';
         const result = processor.process(input, { ...defaultOptions, lang: 'en-US' });
-        expect(result[0]).toContain('less than');
-        expect(result[0]).toContain('greater than or equal to');
+        // Now expecting symbols to be preserved, not replaced
+        expect(result[0]).toContain('<');
+        expect(result[0]).toContain('>=');
     });
 
     test('replaces symbols in Chinese', () => {
         const input = '3 < 5';
         const result = processor.process(input, { ...defaultOptions, lang: 'zh-CN' });
-        expect(result[0]).toContain('小于');
+        expect(result[0]).toContain('<');
     });
 
     test('chunks long text', () => {
@@ -63,4 +64,17 @@ Content`;
         expect(result[0]).not.toContain('http');
         expect(result[0]).not.toContain('Internal');
     });
+    test('does not mistake currency in tables for math', () => {
+        const input = `
+| Item | Price |
+| :--- | :---- |
+| Apple | $1.00 |
+| Banana | $2.00 |
+`;
+        const result = processor.process(input, defaultOptions);
+        // Expect prices to be preserved
+        expect(result[0]).toContain('$1.00');
+        expect(result[0]).toContain('$2.00');
+    });
+
 });

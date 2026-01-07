@@ -33,8 +33,8 @@ export class TextProcessor {
             processed = this.simplifyLinks(processed);
         } else {
             // Basic link cleanup even if keeping text
-            processed = processed.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
-            processed = processed.replace(/\[\[([^\]\|]+)\|([^\]]+)\]\]/g, '$2');
+            processed = processed.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+            processed = processed.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, '$2');
             processed = processed.replace(/\[\[([^\]]+)\]\]/g, '$1');
         }
 
@@ -51,10 +51,10 @@ export class TextProcessor {
         processed = processed.replace(/^[#>-]+\s*/gm, ''); // Headers/Quotes
 
         // 6. Symbol Replacement (Handle >=, <, etc)
-        processed = this.replaceSymbols(processed, options.lang);
+        // processed = this.replaceSymbols(processed, options.lang);
 
         // 7. Final Cleanup (Orphaned =)
-        processed = processed.replace(/=/g, '');
+        // processed = processed.replace(/=/g, ''); // REMOVED: Breaks >=, <=, etc.
         processed = processed.replace(/\n{3,}/g, '\n\n');
 
         return this.chunk(processed.trim());
@@ -73,7 +73,7 @@ export class TextProcessor {
     private removeMath(text: string): string {
         return text
             .replace(/\$\$[\s\S]*?\$\$/g, '')
-            .replace(/\$[^\$]+\$/g, '');
+            .replace(/\$[^$\n]+\$/g, '');
     }
 
     private removeObsidianSyntax(text: string): string {
@@ -86,7 +86,7 @@ export class TextProcessor {
 
     private removeMedia(text: string): string {
         return text
-            .replace(/!\[([^\]]*)\]\([^\)]*\)/g, '')
+            .replace(/!\[([^\]]*)\]\([^)]*\)/g, '')
             .replace(/!\[\[[^\]]*\]\]/g, '');
     }
 
@@ -95,43 +95,43 @@ export class TextProcessor {
     }
 
     private simplifyLinks(text: string): string {
-        return text.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
-            .replace(/\[\[([^\]\|]+)\|([^\]]+)\]\]/g, '$2')
+        return text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+            .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, '$2')
             .replace(/\[\[([^\]]+)\]\]/g, '$1');
     }
 
-    private replaceSymbols(text: string, lang: string): string {
-        const isZh = lang.startsWith('zh');
-        const map: Record<string, string> = isZh ? {
-            '<': '小于',
-            '>': '大于',
-            '<=': '小于等于',
-            '>=': '大于等于',
-            '=': '等于',
-            '+': '加'
-        } : {
-            '<': ' less than ',
-            '>': ' greater than ',
-            '<=': ' less than or equal to ',
-            '>=': ' greater than or equal to ',
-            '=': ' equals ',
-            '+': ' plus '
-        };
+    // private replaceSymbols(text: string, lang: string): string {
+    //     const isZh = lang.startsWith('zh');
+    //     const map: Record<string, string> = isZh ? {
+    //         '<': '小于',
+    //         '>': '大于',
+    //         '<=': '小于等于',
+    //         '>=': '大于等于',
+    //         '=': '等于',
+    //         '+': '加'
+    //     } : {
+    //         '<': ' less than ',
+    //         '>': ' greater than ',
+    //         '<=': ' less than or equal to ',
+    //         '>=': ' greater than or equal to ',
+    //         '=': ' equals ',
+    //         '+': ' plus '
+    //     };
 
-        let res = text;
-        const keys = Object.keys(map).sort((a, b) => b.length - a.length);
+    //     let res = text;
+    //     const keys = Object.keys(map).sort((a, b) => b.length - a.length);
 
-        for (const sym of keys) {
-            const word = map[sym];
-            if (word) {
-                const escapedSym = sym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const re = new RegExp(`(?<=\\s|\\d)${escapedSym}(?=\\s|\\d)`, 'g');
-                res = res.replace(re, word);
-            }
-        }
+    //     for (const sym of keys) {
+    //         const word = map[sym];
+    //         if (word) {
+    //             const escapedSym = sym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    //             const re = new RegExp(`(?<=\\s|\\d)${escapedSym}(?=\\s|\\d)`, 'g');
+    //             res = res.replace(re, word);
+    //         }
+    //     }
 
-        return res;
-    }
+    //     return res;
+    // }
 
     private chunk(text: string, maxLen: number = 2500): string[] {
         if (text.length <= maxLen) return [text];

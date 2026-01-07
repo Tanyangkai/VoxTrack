@@ -1,9 +1,11 @@
 import { EdgeSocket } from '../../src/api/edge-socket';
+import { WebSocket } from 'ws';
+
+jest.mock('ws');
 
 describe('EdgeSocket', () => {
     let socket: EdgeSocket;
     let mockWsInstance: any;
-    let originalWebSocket: any;
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -18,23 +20,30 @@ describe('EdgeSocket', () => {
             writable: true
         });
 
+        // Setup the mock instance that WebSocket constructor will return
         mockWsInstance = {
             send: jest.fn(),
             close: jest.fn(),
             addEventListener: jest.fn(),
             on: jest.fn(),
-            readyState: 1
+            readyState: 1, // OPEN
+            onopen: null, // Will be set by the class
+            onmessage: null,
+            onerror: null,
+            onclose: null,
+            binaryType: 'arraybuffer'
         };
 
-        originalWebSocket = global.WebSocket;
-        global.WebSocket = jest.fn(() => mockWsInstance) as any;
-        (global.WebSocket as any).OPEN = 1;
+        // When new WebSocket() is called, return our mock instance
+        (WebSocket as unknown as jest.Mock).mockImplementation(() => mockWsInstance);
+        // Also mock the static OPEN constant
+        (WebSocket as any).OPEN = 1;
 
         socket = new EdgeSocket();
     });
 
     afterEach(() => {
-        global.WebSocket = originalWebSocket;
+        jest.restoreAllMocks();
     });
 
     test('connect should establish WebSocket connection', async () => {
@@ -43,8 +52,9 @@ describe('EdgeSocket', () => {
         // Wait for async parts (crypto)
         await new Promise(resolve => setTimeout(resolve, 50));
 
-        expect(global.WebSocket).toHaveBeenCalledWith(
-            expect.stringContaining('Sec-MS-GEC=')
+        expect(WebSocket).toHaveBeenCalledWith(
+            expect.stringContaining('wss://'),
+            expect.objectContaining({ headers: expect.any(Object) })
         );
 
         // Simulate open event
