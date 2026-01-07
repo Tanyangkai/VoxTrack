@@ -1,3 +1,4 @@
+import { TrackedString } from './utils/tracked-string';
 
 export interface TextProcessorOptions {
     filterCode: boolean;
@@ -17,209 +18,112 @@ export class TextProcessor {
     constructor() { }
 
     public process(text: string, options: TextProcessorOptions): ProcessedChunk[] {
-        let processed = text;
+        // Initialize TrackedString with original text and 1-to-1 map
+        const ts = new TrackedString(text);
 
-        // 1. Structural Filters (Large blocks)
+        // 1. Structural Filters (Large blocks) - Pure Removal
         if (options.filterFrontmatter) {
-            processed = this.removeFrontmatter(processed);
+            ts.remove(/^---[\s\S]*?---\n?/);
         }
         if (options.filterCode) {
-            processed = this.removeCodeBlocks(processed);
+            ts.remove(/```[\s\S]*?```/); 
+            ts.remove(/`[^`\n]+`/); 
         }
         if (options.filterMath) {
-            processed = this.removeMath(processed);
+            ts.remove(/\$\$[\s\S]*?\$\$/);
+            ts.remove(/\$[^$\n]+\$/);
         }
         if (options.filterObsidian) {
-            processed = this.removeObsidianSyntax(processed);
+            ts.remove(/>\s*\[!.*\][^\n]*\n/); // Callout headers
+            ts.remove(/%%[\s\S]*?%%/); // Comments
+            ts.remove(/<!--[\s\S]*?-->/); // HTML Comments
+            ts.remove(/\^[\w-]+/); // Block IDs
         }
 
-        // 2. Link Processing (Must be before pipe removal)
+        // 2. Link Processing
         if (options.filterLinks) {
-            processed = this.simplifyLinks(processed);
+            // [text](url) -> text (Group 1)
+            ts.keepGroup1(/\[([^\]]+)\]\([^)]+\)/);
+            // [[link|text]] -> text (Group 1 is what we want)
+            // Original: /\[\[([^\]|]+)\|([^\]]+)\]\]/ -> $2
+            // We need to modify regex to capture ONLY the part we want in group 1.
+            ts.keepGroup1(/\[\[[^\]|]+\|([^\]]+)\]\]/);
+            // [[link]] -> link (Group 1)
+            ts.keepGroup1(/\[\[([^\]]+)\]\]/);
         } else {
             // Basic link cleanup even if keeping text
-            processed = processed.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
-            processed = processed.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, '$2');
-            processed = processed.replace(/\[\[([^\]]+)\]\]/g, '$1');
+            ts.keepGroup1(/\[([^\]]+)\]\([^)]+\)/);
+            ts.keepGroup1(/\[\[[^\]|]+\|([^\]]+)\]\]/);
+            ts.keepGroup1(/\[\[([^\]]+)\]\]/);
         }
 
         // 3. Media Removal
-        processed = this.removeMedia(processed);
-        // Remove Emoji to prevent TTS from reading descriptions (misaligning sync)
-        processed = processed.replace(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F018}-\u{1F0F5}\u{1F200}-\u{1F270}\u{FE0F}]/gu, '');
+        ts.remove(/!\[([^\]]*)\]\([^)]*\)/);
+        ts.remove(/!\[\[[^\]]*\]\]/);
 
-        // 4. Common Filter (Pipes) - After links
-        processed = this.filterCommon(processed);
+        // Remove Emoji
+        ts.remove(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F018}-\u{1F0F5}\u{1F200}-\u{1F270}\u{FE0F}]/u);
 
-        // 5. Structure Cleanup (Headers, Quotes, Lists)
-        // Remove formatting chars except '=' which is needed for symbols
-        processed = processed.replace(/^\s*[-:\s]+\s*$/gm, ''); // Empty list items/dividers
-        // Replace formatting chars with space to prevent concatenating words (e.g. A*B -> AB)
-        processed = processed.replace(/[*_`~]/g, ' '); 
-        processed = processed.replace(/^[#>-]+\s*/gm, ''); // Headers/Quotes
+        // 4. Common Filter (Pipes) - 1-to-1 Replacement
+        ts.replace(/\|/, '\n');
 
-        // 6. Symbol Replacement (Handle >=, <, etc)
-        // processed = this.replaceSymbols(processed, options.lang);
+        // 5. Structure Cleanup
+        // Empty list items/dividers
+        ts.remove(/^\s*[-:\s]+\s*$/m); 
+        
+        // Formatting chars: * _ ` ~ -> space
+        ts.replace(/[*_`~]/, ' ');
+        
+        // Headers/Quotes
+        ts.remove(/^[#>-]+\s*/m);
 
-        // 7. Final Cleanup (Orphaned =)
-        // processed = processed.replace(/=/g, ''); // REMOVED: Breaks >=, <=, etc.
-        processed = processed.replace(/\n{3,}/g, '\n\n');
+        // 7. Final Cleanup
+        ts.replace(/\n{3,}/, '\n\n');
 
-        // Trim first to ensure clean start/end
-        const trimmed = processed.trim();
-        const map = this.computeSourceMap(text, trimmed);
+        // Trim
+        ts.trim();
 
-        return this.chunk(trimmed, map);
+        return this.chunk(ts);
     }
 
-    private computeSourceMap(raw: string, processed: string): number[] {
-        const map: number[] = new Array(processed.length).fill(-1);
-        let rawIdx = 0;
-
-        for (let procIdx = 0; procIdx < processed.length; procIdx++) {
-            const procChar = processed[procIdx];
-            if (!procChar) continue;
-            
-            // Potential raw candidates for the current procChar:
-            // 1. procChar itself
-            // 2. If procChar is '\n', raw could be '|'
-            // 3. If procChar is ' ', raw could be '*', '_', '`', '~'
-            
-            const candidates = [procChar];
-            if (procChar === '\n') candidates.push('|');
-            if (procChar === ' ') candidates.push('*', '_', '`', '~');
-            
-            let bestMatchIdx = -1;
-            let minDist = Infinity;
-            
-            for (const cand of candidates) {
-                const found = raw.indexOf(cand, rawIdx);
-                if (found !== -1 && found < minDist) {
-                    minDist = found;
-                    bestMatchIdx = found;
-                }
-            }
-            
-            if (bestMatchIdx !== -1) {
-                map[procIdx] = bestMatchIdx;
-                rawIdx = bestMatchIdx + 1;
-            }
-        }
-        return map;
-    }
-
-    private removeFrontmatter(text: string): string {
-        return text.replace(/^---[\s\S]*?---\n?/, '');
-    }
-
-    private removeCodeBlocks(text: string): string {
-        return text
-            .replace(/```[\s\S]*?```/g, '')
-            .replace(/`[^`]+`/g, ''); // Inline code
-    }
-
-    private removeMath(text: string): string {
-        return text
-            .replace(/\$\$[\s\S]*?\$\$/g, '')
-            .replace(/\$[^$\n]+\$/g, '');
-    }
-
-    private removeObsidianSyntax(text: string): string {
-        return text
-            .replace(/>\s*\[!.*\][^\n]*\n/g, '') // Callout headers
-            .replace(/%%[\s\S]*?%%/g, '') // Comments
-            .replace(/<!--[\s\S]*?-->/g, '') // HTML Comments
-            .replace(/\^[\w-]+/g, ''); // Block IDs
-    }
-
-    private removeMedia(text: string): string {
-        return text
-            .replace(/!\[([^\]]*)\]\([^)]*\)/g, '')
-            .replace(/!\[\[[^\]]*\]\]/g, '');
-    }
-
-    private filterCommon(text: string): string {
-        return text.replace(/\|/g, '\n');
-    }
-
-    private simplifyLinks(text: string): string {
-        return text.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
-            .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, '$2')
-            .replace(/\[\[([^\]]+)\]\]/g, '$1');
-    }
-
-    // private replaceSymbols(text: string, lang: string): string {
-    //     const isZh = lang.startsWith('zh');
-    //     const map: Record<string, string> = isZh ? {
-    //         '<': '小于',
-    //         '>': '大于',
-    //         '<=': '小于等于',
-    //         '>=': '大于等于',
-    //         '=': '等于',
-    //         '+': '加'
-    //     } : {
-    //         '<': ' less than ',
-    //         '>': ' greater than ',
-    //         '<=': ' less than or equal to ',
-    //         '>=': ' greater than or equal to ',
-    //         '=': ' equals ',
-    //         '+': ' plus '
-    //     };
-
-    //     let res = text;
-    //     const keys = Object.keys(map).sort((a, b) => b.length - a.length);
-
-    //     for (const sym of keys) {
-    //         const word = map[sym];
-    //         if (word) {
-    //             const escapedSym = sym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    //             const re = new RegExp(`(?<=\\s|\\d)${escapedSym}(?=\\s|\\d)`, 'g');
-    //             res = res.replace(re, word);
-    //         }
-    //     }
-
-    //     return res;
-    // }
-
-    private chunk(text: string, map: number[], maxLen: number = 2500): ProcessedChunk[] {
-        if (text.length <= maxLen) return [{ text, map }];
+    private chunk(ts: TrackedString, maxLen: number = 2500): ProcessedChunk[] {
+        if (ts.length <= maxLen) return [{ text: ts.text, map: ts.map }];
 
         const chunks: ProcessedChunk[] = [];
-        let remaining = text;
-        let remainingMap = map;
+        let remaining = ts;
 
         while (remaining.length > 0) {
             if (remaining.length <= maxLen) {
-                chunks.push({ text: remaining, map: remainingMap });
+                chunks.push({ text: remaining.text, map: remaining.map });
                 break;
             }
 
             let cut = maxLen;
             const checkWindow = Math.floor(maxLen * 0.2);
+            const textStr = remaining.text;
 
-            let found = remaining.lastIndexOf('\n\n', cut);
+            let found = textStr.lastIndexOf('\n\n', cut);
             if (found > cut - checkWindow) {
                 cut = found + 2;
             } else {
-                found = remaining.lastIndexOf('. ', cut);
+                found = textStr.lastIndexOf('. ', cut);
                 if (found > cut - checkWindow) {
                     cut = found + 2;
                 } else {
-                    found = remaining.lastIndexOf(', ', cut);
+                    found = textStr.lastIndexOf(', ', cut);
                     if (found > cut - checkWindow) cut = found + 2;
                     else {
-                        found = remaining.lastIndexOf(' ', cut);
+                        found = textStr.lastIndexOf(' ', cut);
                         if (found > cut - checkWindow) cut = found + 1;
                     }
                 }
             }
 
             chunks.push({
-                text: remaining.substring(0, cut),
-                map: remainingMap.slice(0, cut)
+                text: remaining.text.substring(0, cut),
+                map: remaining.map.slice(0, cut)
             });
-            remaining = remaining.substring(cut);
-            remainingMap = remainingMap.slice(cut);
+            remaining = remaining.slice(cut);
         }
 
         return chunks;
