@@ -239,7 +239,10 @@ export default class VoxTrackPlugin extends Plugin {
 						
 						let rawEnd = -1;
 						if (endIdxInProcessed < currentMap.length) {
-							rawEnd = currentMap[endIdxInProcessed];
+							const val = currentMap[endIdxInProcessed];
+							if (val !== undefined) {
+								rawEnd = val;
+							}
 						} else if (currentMap.length > 0) {
 							// End of string, guess based on last char
 							// Note: This might be inaccurate if there are trailing deleted chars, but "word" usually doesn't include them.
@@ -247,7 +250,7 @@ export default class VoxTrackPlugin extends Plugin {
 							// We can just calculate length based on content if map fails for end.
 						}
 
-						if (rawStart !== -1) {
+						if (rawStart !== undefined && rawStart !== -1) {
 							const absStart = this.baseOffset + rawStart;
 							foundIndex = absStart;
 							
@@ -318,7 +321,7 @@ export default class VoxTrackPlugin extends Plugin {
 						const endIdxInProcessed = active.textOffset + active.wordLength;
 						if (endIdxInProcessed < currentMap.length) {
 							const rawEnd = currentMap[endIdxInProcessed];
-							if (rawEnd !== -1) {
+							if (rawEnd !== undefined && rawEnd !== -1) {
 								const absEnd = this.baseOffset + rawEnd;
 								if (absEnd > from) {
 									matchLen = absEnd - from;

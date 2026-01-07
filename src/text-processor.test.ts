@@ -21,7 +21,7 @@ title: Test
 ---
 Content`;
         const result = processor.process(input, defaultOptions);
-        expect(result[0].text).toBe('Content');
+        expect(result[0]?.text).toBe('Content');
     });
 
     test('removes code blocks', () => {
@@ -40,14 +40,14 @@ Content`;
         const input = '3 < 5 and a >= b';
         const result = processor.process(input, { ...defaultOptions, lang: 'en-US' });
         // Now expecting symbols to be preserved, not replaced
-        expect(result[0].text).toContain('<');
-        expect(result[0].text).toContain('>=');
+        expect(result[0]?.text).toContain('<');
+        expect(result[0]?.text).toContain('>=');
     });
 
     test('replaces symbols in Chinese', () => {
         const input = '3 < 5';
         const result = processor.process(input, { ...defaultOptions, lang: 'zh-CN' });
-        expect(result[0].text).toContain('<');
+        expect(result[0]?.text).toContain('<');
     });
 
     test('chunks long text', () => {
@@ -60,9 +60,9 @@ Content`;
     test('handles links', () => {
         const input = 'Click [here](http://example.com) or [[Internal|Link]].';
         const result = processor.process(input, defaultOptions);
-        expect(result[0].text).toContain('Click here or Link.');
-        expect(result[0].text).not.toContain('http');
-        expect(result[0].text).not.toContain('Internal');
+        expect(result[0]?.text).toContain('Click here or Link.');
+        expect(result[0]?.text).not.toContain('http');
+        expect(result[0]?.text).not.toContain('Internal');
     });
 
     test('does not mistake currency in tables for math', () => {
@@ -74,8 +74,8 @@ Content`;
 `;
         const result = processor.process(input, defaultOptions);
         // Expect prices to be preserved
-        expect(result[0].text).toContain('$1.00');
-        expect(result[0].text).toContain('$2.00');
+        expect(result[0]?.text).toContain('$1.00');
+        expect(result[0]?.text).toContain('$2.00');
     });
 
     test('correctly processes complex Chinese tables', () => {
@@ -92,19 +92,19 @@ Content`;
 ·有强烈好奇心。`;
 
         const result = processor.process(input, defaultOptions);
-        console.log('Processed Chinese Table:', JSON.stringify(result[0].text));
+        console.log('Processed Chinese Table:', JSON.stringify(result[0]?.text));
 
         // Should contain key content
-        expect(result[0].text).toContain('行动');
-        expect(result[0].text).toContain('不犹豫');
-        expect(result[0].text).not.toContain('|'); // Should typically remove pipes
-        expect(result[0].text).not.toContain('---'); // Should remove separators
+        expect(result[0]?.text).toContain('行动');
+        expect(result[0]?.text).toContain('不犹豫');
+        expect(result[0]?.text).not.toContain('|'); // Should typically remove pipes
+        expect(result[0]?.text).not.toContain('---'); // Should remove separators
     });
 
     test('removes emojis', () => {
         const input = 'Start 🏗️ End';
         const result = processor.process(input, defaultOptions);
-        expect(result[0].text).toBe('Start  End');
+        expect(result[0]?.text).toBe('Start  End');
     });
 
 });

@@ -78,6 +78,7 @@ export class TextProcessor {
 
         for (let procIdx = 0; procIdx < processed.length; procIdx++) {
             const procChar = processed[procIdx];
+            if (!procChar) continue;
             
             // Potential raw candidates for the current procChar:
             // 1. procChar itself
