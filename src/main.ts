@@ -185,18 +185,53 @@ export default class VoxTrackPlugin extends Plugin {
 				const wordToFind = active.text;
 				let foundIndex = docText.indexOf(wordToFind, currentDocOffset);
 
+				// Fallback 1: Case-insensitive search
+				if (foundIndex === -1) {
+					const lowerDoc = docText.toLowerCase();
+					const lowerWord = wordToFind.toLowerCase();
+					foundIndex = lowerDoc.indexOf(lowerWord, currentDocOffset);
+				}
+
+				// Fallback 2: Fuzzy search (strip punctuation from wordToFind)
+				// TTS sometimes adds punctuation like commas or periods that aren't in source
+				if (foundIndex === -1) {
+					const cleanWord = wordToFind.replace(/[.,;!?。，；！？、]/g, '');
+					if (cleanWord.length > 1 && cleanWord !== wordToFind) {
+						foundIndex = docText.indexOf(cleanWord, currentDocOffset);
+						// Try case-insensitive specific clean word
+						if (foundIndex === -1) {
+							foundIndex = docText.toLowerCase().indexOf(cleanWord.toLowerCase(), currentDocOffset);
+						}
+					}
+				}
+
 				if (foundIndex !== -1) {
+					// Sanity check: Don't jump too far ahead (e.g. 1000 chars) unless it's a long gap in audio
+					// But for now, trust it but log it
+					// console.debug(`[VoxTrack] Sync: Found "${wordToFind}" at ${foundIndex} (delta ${foundIndex - currentDocOffset})`);
+
 					const from = foundIndex;
-					const to = from + wordToFind.length;
+					// Use original word length if found exactly, otherwise might differ slightly but close enough for highlighting
+					const to = from + (docText.substring(from, from + wordToFind.length) === wordToFind ? wordToFind.length : wordToFind.replace(/[.,;!?。，；！？、]/g, '').length);
+
 					currentDocOffset = to;
 
 					const view = (this.activeEditor as any).cm || (this.activeEditor as any).editor?.cm || (this.activeEditor as any).view;
 					if (view && view.dispatch) {
-						view.dispatch({
+						const transaction: any = {
 							effects: setActiveRange.of({ from, to }),
 							scrollIntoView: this.settings.autoScroll
-						});
+						};
+						
+						// If autoScroll is on, also move cursor to ensure Live Preview renders Source Mode for tables
+						if (this.settings.autoScroll) {
+							transaction.selection = { anchor: to };
+						}
+						
+						view.dispatch(transaction);
 					}
+				} else {
+					console.debug(`[VoxTrack] Sync: Could not find "${wordToFind}" after ${currentDocOffset}`);
 				}
 			}
 
