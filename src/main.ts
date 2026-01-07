@@ -1,4 +1,4 @@
-import { Editor, MarkdownView, Plugin, Notice } from 'obsidian';
+import { Editor, MarkdownView, Plugin, Notice, setIcon } from 'obsidian';
 import { v4 as uuidv4 } from 'uuid';
 import { VoxTrackSettings, DEFAULT_SETTINGS, VoxTrackSettingTab } from './settings/setting-tab';
 import { AudioPlayer } from './audio/player';
@@ -27,6 +27,12 @@ export default class VoxTrackPlugin extends Plugin {
 	private currentChunkIndex: number = 0;
 	private chunkOffsets: number[] = [];
 
+	// Status Bar Elements
+	private statusBarItemEl: HTMLElement;
+	private statusBarTextEl: HTMLElement;
+	private statusBarPlayBtn: HTMLElement;
+	private statusBarStopBtn: HTMLElement;
+
 	public async onload(): Promise<void> {
 		await this.loadSettings();
 
@@ -38,34 +44,64 @@ export default class VoxTrackPlugin extends Plugin {
 		this.addSettingTab(new VoxTrackSettingTab(this.app, this));
 		this.registerEditorExtension(voxTrackExtensions());
 
-		const statusBarItemEl = this.addStatusBarItem();
-		statusBarItemEl.setText('VoxTrack: Ready');
+		// Status Bar Initialization
+		this.statusBarItemEl = this.addStatusBarItem();
+		this.statusBarItemEl.addClass('voxtrack-status-bar');
+
+		this.statusBarTextEl = this.statusBarItemEl.createSpan({ cls: 'voxtrack-status-text', text: 'VoxTrack: Ready' });
+
+		// Play/Pause Button
+		this.statusBarPlayBtn = this.statusBarItemEl.createSpan({ cls: 'voxtrack-status-btn', attr: { 'aria-label': 'Play/Pause' } });
+		setIcon(this.statusBarPlayBtn, 'play');
+		this.statusBarPlayBtn.onclick = () => {
+			if (this.isPlaying && this.activeEditor) {
+				// If playing, just toggle
+				void this.togglePlay(this.activeEditor, 'auto', this.statusBarItemEl);
+			} else {
+				// If not playing, find active view
+				const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+				if (activeView) {
+					void this.togglePlay(activeView.editor, 'auto', this.statusBarItemEl);
+				} else {
+					new Notice('VoxTrack: No active Markdown editor found.');
+				}
+			}
+		};
+
+		// Stop Button
+		this.statusBarStopBtn = this.statusBarItemEl.createSpan({ cls: 'voxtrack-status-btn', attr: { 'aria-label': 'Stop' } });
+		setIcon(this.statusBarStopBtn, 'square');
+		this.statusBarStopBtn.onclick = () => {
+			if (this.isPlaying) {
+				this.stopPlayback(this.statusBarItemEl);
+			}
+		};
 
 
 		// Ribbon Icon
 		this.addRibbonIcon('play-circle', 'VoxTrack: Play/Pause', (evt: MouseEvent) => {
 			const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
 			if (activeView) {
-				void this.togglePlay(activeView.editor, 'auto', statusBarItemEl);
+				void this.togglePlay(activeView.editor, 'auto', this.statusBarItemEl);
 			} else {
 				// Try to stop if no active editor but maybe global playing? 
 				// For now just match command logic which requires editor usually, 
 				// but stop can be global.
 				if (this.isPlaying) {
-					this.stopPlayback(statusBarItemEl);
+					this.stopPlayback(this.statusBarItemEl);
 				}
 			}
 		});
 
 		this.player.onComplete(() => {
-			this.handlePlaybackFinished(statusBarItemEl);
+			this.handlePlaybackFinished(this.statusBarItemEl);
 		});
 
 		this.addCommand({
 			id: 'voxtrack-play',
 			name: 'Play / pause',
 			editorCallback: (editor: Editor) => {
-				void this.togglePlay(editor, 'auto', statusBarItemEl);
+				void this.togglePlay(editor, 'auto', this.statusBarItemEl);
 			}
 		});
 
@@ -73,7 +109,7 @@ export default class VoxTrackPlugin extends Plugin {
 			id: 'voxtrack-read-from-cursor',
 			name: 'Read from cursor',
 			editorCallback: (editor: Editor) => {
-				void this.togglePlay(editor, 'cursor', statusBarItemEl);
+				void this.togglePlay(editor, 'cursor', this.statusBarItemEl);
 			}
 		});
 
@@ -81,7 +117,7 @@ export default class VoxTrackPlugin extends Plugin {
 			id: 'voxtrack-stop',
 			name: 'Stop',
 			editorCallback: () => {
-				this.stopPlayback(statusBarItemEl);
+				this.stopPlayback(this.statusBarItemEl);
 			}
 		});
 
@@ -93,7 +129,7 @@ export default class VoxTrackPlugin extends Plugin {
 						.setTitle('VoxTrack: Read from cursor')
 						.setIcon('play-circle')
 						.onClick(() => {
-							void this.togglePlay(editor, 'cursor', statusBarItemEl);
+							void this.togglePlay(editor, 'cursor', this.statusBarItemEl);
 						});
 				});
 			})
@@ -309,11 +345,11 @@ export default class VoxTrackPlugin extends Plugin {
 			if (this.isPaused) {
 				await this.player.play();
 				this.isPaused = false;
-				if (statusBar) statusBar.setText('VoxTrack: Playing...');
+				this.updateStatus('VoxTrack: Playing...', true, false);
 			} else {
 				this.player.pause();
 				this.isPaused = true;
-				if (statusBar) statusBar.setText('VoxTrack: Paused');
+				this.updateStatus('VoxTrack: Paused', true, true);
 			}
 			return;
 		}
@@ -419,7 +455,7 @@ export default class VoxTrackPlugin extends Plugin {
 		this.activeEditor = null;
 		this.textChunks = [];
 		this.currentChunkIndex = 0;
-		if (statusBar) statusBar.setText('VoxTrack: Ready');
+		this.updateStatus('VoxTrack: Ready', false, false);
 	}
 
 	private handlePlaybackFinished(statusBar?: HTMLElement) {
@@ -439,7 +475,7 @@ export default class VoxTrackPlugin extends Plugin {
 		this.activeEditor = null;
 		this.textChunks = [];
 		this.currentChunkIndex = 0;
-		if (statusBar) statusBar.setText('VoxTrack: Ready');
+		this.updateStatus('VoxTrack: Ready', false, false);
 	}
 
 	public async loadSettings(): Promise<void> {
@@ -448,5 +484,17 @@ export default class VoxTrackPlugin extends Plugin {
 
 	public async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
+	}
+
+	private updateStatus(text: string, isPlaying: boolean, isPaused: boolean) {
+		if (this.statusBarTextEl) {
+			this.statusBarTextEl.setText(text);
+		}
+		if (this.statusBarPlayBtn) {
+			// If playing and NOT paused, show pause icon. Otherwise show play icon.
+			const showPause = isPlaying && !isPaused;
+			setIcon(this.statusBarPlayBtn, showPause ? 'pause' : 'play');
+			this.statusBarPlayBtn.setAttribute('aria-label', showPause ? 'Pause' : 'Play');
+		}
 	}
 }

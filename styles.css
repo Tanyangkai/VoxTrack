@@ -17,3 +17,33 @@ VoxTrack Highlight Styles
 .theme-light .voxtrack-active-word {
     background-color: rgba(255, 255, 0, 0.4);
 }
+
+/* Status Bar Styles */
+.status-bar-item.voxtrack-status-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 5px;
+}
+
+.voxtrack-status-text {
+    margin-right: 4px;
+}
+
+.voxtrack-status-btn {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    transition: color 0.1s ease;
+}
+
+.voxtrack-status-btn:hover {
+    color: var(--text-normal);
+}
+
+.voxtrack-status-btn svg {
+    width: 16px;
+    height: 16px;
+}
