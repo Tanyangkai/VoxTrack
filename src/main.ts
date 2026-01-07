@@ -343,17 +343,31 @@ export default class VoxTrackPlugin extends Plugin {
 
 					const view = (this.activeEditor as any).cm || (this.activeEditor as any).editor?.cm || (this.activeEditor as any).view;
 					if (view && view.dispatch) {
+						// Defensive check: CodeMirror Mark decorations cannot be empty (from === to).
+						// Ensure we have at least 1 character if possible, or skip update.
+						let safeTo = to;
+						if (safeTo <= from) {
+							if (from < docText.length) {
+								safeTo = from + 1;
+							} else {
+								// End of doc, cannot extend.
+								// If from > 0, try extending backwards? Or just ignore.
+								// Ignoring is safest to prevent crash.
+								return; 
+							}
+						}
+
 						const shouldScroll = this.settings.autoScrollMode !== 'off';
 						const shouldMoveCursor = this.settings.autoScrollMode === 'cursor';
 
 						const transaction: any = {
-							effects: setActiveRange.of({ from, to }),
+							effects: setActiveRange.of({ from, to: safeTo }),
 							scrollIntoView: shouldScroll
 						};
 
 						// If mode is 'cursor', move cursor to ensure Live Preview renders Source Mode for tables
 						if (shouldMoveCursor) {
-							transaction.selection = { anchor: to };
+							transaction.selection = { anchor: safeTo };
 						}
 
 						view.dispatch(transaction);
