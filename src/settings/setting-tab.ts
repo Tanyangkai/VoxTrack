@@ -9,6 +9,11 @@ export interface VoxTrackSettings {
     autoScroll: boolean;
     highlightMode: 'word' | 'sentence' | 'none';
     clickToPlay: boolean;
+    filterCode: boolean;
+    filterLinks: boolean;
+    filterMath: boolean;
+    filterFrontmatter: boolean;
+    filterObsidian: boolean;
 }
 
 export const DEFAULT_SETTINGS: VoxTrackSettings = {
@@ -18,7 +23,12 @@ export const DEFAULT_SETTINGS: VoxTrackSettings = {
     volume: "+0%",
     autoScroll: true,
     highlightMode: 'word',
-    clickToPlay: false
+    clickToPlay: false,
+    filterCode: true,
+    filterLinks: true,
+    filterMath: true,
+    filterFrontmatter: true,
+    filterObsidian: true
 };
 
 export class VoxTrackSettingTab extends PluginSettingTab {
@@ -67,6 +77,60 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.pitch)
                 .onChange(async (value) => {
                     this.plugin.settings.pitch = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Text filters')
+            .setHeading();
+
+        new Setting(containerEl)
+            .setName('Filter frontmatter')
+            .setDesc('Skip YAML frontmatter at the beginning of the note')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.filterFrontmatter)
+                .onChange(async (value) => {
+                    this.plugin.settings.filterFrontmatter = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Filter code blocks')
+            .setDesc('Skip code blocks and inline code')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.filterCode)
+                .onChange(async (value) => {
+                    this.plugin.settings.filterCode = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Filter links')
+            .setDesc('Read link caption only, skip URL')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.filterLinks)
+                .onChange(async (value) => {
+                    this.plugin.settings.filterLinks = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Filter math')
+            .setDesc('Skip LaTeX math equations')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.filterMath)
+                .onChange(async (value) => {
+                    this.plugin.settings.filterMath = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Filter Obsidian syntax')
+            .setDesc('Skip callouts, comments, and other metadata')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.filterObsidian)
+                .onChange(async (value) => {
+                    this.plugin.settings.filterObsidian = value;
                     await this.plugin.saveSettings();
                 }));
 

@@ -7,12 +7,15 @@ import { EdgeSocket } from './api/edge-socket';
 import { voxTrackExtensions } from './editor/extensions';
 import { setActiveRange } from './editor/decorations';
 import { parseMetadata } from './api/protocol';
+import { TextProcessor } from './text-processor';
+import { getSelectedText, getTextFromCursor, getFullText } from './utils/editor-utils';
 
 export default class VoxTrackPlugin extends Plugin {
 	settings: VoxTrackSettings;
 	private player: AudioPlayer;
 	private syncController: SyncController;
 	private socket: EdgeSocket;
+	private textProcessor: TextProcessor;
 	private isPlaying: boolean = false;
 	private isTransferFinished: boolean = false;
 	private hasShownReceivingNotice: boolean = false;
@@ -29,12 +32,29 @@ export default class VoxTrackPlugin extends Plugin {
 		this.player = new AudioPlayer();
 		this.syncController = new SyncController();
 		this.socket = new EdgeSocket();
+		this.textProcessor = new TextProcessor();
 
 		this.addSettingTab(new VoxTrackSettingTab(this.app, this));
 		this.registerEditorExtension(voxTrackExtensions());
 
 		const statusBarItemEl = this.addStatusBarItem();
 		statusBarItemEl.setText('VoxTrack: Ready');
+
+
+		// Ribbon Icon
+		this.addRibbonIcon('play-circle', 'VoxTrack: Play/Pause', (evt: MouseEvent) => {
+			const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+			if (activeView) {
+				void this.togglePlay(activeView.editor, 'auto', statusBarItemEl);
+			} else {
+				// Try to stop if no active editor but maybe global playing? 
+				// For now just match command logic which requires editor usually, 
+				// but stop can be global.
+				if (this.isPlaying) {
+					this.stopPlayback(statusBarItemEl);
+				}
+			}
+		});
 
 		this.player.onComplete(() => {
 			this.handlePlaybackFinished(statusBarItemEl);
@@ -44,7 +64,15 @@ export default class VoxTrackPlugin extends Plugin {
 			id: 'voxtrack-play',
 			name: 'Play / pause',
 			editorCallback: (editor: Editor) => {
-				void this.togglePlay(editor, statusBarItemEl);
+				void this.togglePlay(editor, 'auto', statusBarItemEl);
+			}
+		});
+
+		this.addCommand({
+			id: 'voxtrack-read-from-cursor',
+			name: 'Read from cursor',
+			editorCallback: (editor: Editor) => {
+				void this.togglePlay(editor, 'cursor', statusBarItemEl);
 			}
 		});
 
@@ -55,6 +83,20 @@ export default class VoxTrackPlugin extends Plugin {
 				this.stopPlayback(statusBarItemEl);
 			}
 		});
+
+		// Context Menu
+		this.registerEvent(
+			this.app.workspace.on('editor-menu', (menu, editor) => {
+				menu.addItem((item) => {
+					item
+						.setTitle('VoxTrack: Read from cursor')
+						.setIcon('play-circle')
+						.onClick(() => {
+							void this.togglePlay(editor, 'cursor', statusBarItemEl);
+						});
+				});
+			})
+		);
 	}
 
 	public async onunload(): Promise<void> {
@@ -82,7 +124,7 @@ export default class VoxTrackPlugin extends Plugin {
 						this.hasShownReceivingNotice = true;
 					}
 					this.player.addChunk(new Uint8Array(audioData));
-					void this.player.play().catch(() => {}); 
+					void this.player.play().catch(() => { });
 				}
 			} else {
 				const text = new TextDecoder('utf-8').decode(buffer);
@@ -127,17 +169,17 @@ export default class VoxTrackPlugin extends Plugin {
 
 			const time = this.player.getCurrentTime();
 			const active = this.syncController.findActiveMetadata(time);
-			
+
 			if (active && active !== lastActive && this.activeEditor) {
 				if (lastActive === null || active.offset < lastActive.offset) {
 					currentDocOffset = this.baseOffset;
 				}
 				lastActive = active;
-				
+
 				const docText = this.activeEditor.getValue();
 				const wordToFind = active.text;
 				let foundIndex = docText.indexOf(wordToFind, currentDocOffset);
-				
+
 				if (foundIndex !== -1) {
 					const from = foundIndex;
 					const to = from + wordToFind.length;
@@ -165,34 +207,8 @@ export default class VoxTrackPlugin extends Plugin {
 			if (!nextText) return;
 
 			this.baseOffset = this.chunkOffsets[this.currentChunkIndex] || 0;
-			
-			const voice = this.settings.voice || 'zh-CN-XiaoxiaoNeural';
-			const rate = this.settings.rate || '+0%';
-			const pitch = this.settings.pitch || '+0Hz';
-			const volume = this.settings.volume || '+0%';
-			const lang = voice.startsWith('zh') ? 'zh-CN' : 'en-US';
 
-			const filteredText = this.filterMarkdown(nextText);
-			if (!filteredText.trim()) {
-				console.debug('[VoxTrack] Chunk is empty after filtering, skipping');
-				void this.processNextChunk(statusBar);
-				return;
-			}
-			const escapedText = filteredText.replace(/[<>&"']/g, (c) => {
-				switch (c) {
-					case '<': return '&lt;';
-					case '>': return '&gt;';
-					case '&': return '&amp;';
-					case '"': return '&quot;';
-					case "'": return '&apos;';
-					default: return c;
-				}
-			});
-
-			const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='${lang}'><voice name='${voice}'><prosody pitch='${pitch}' rate='${rate}' volume='${volume}'>${escapedText}</prosody></voice></speak>`;
-
-			console.debug(`[VoxTrack] Sending Chunk ${this.currentChunkIndex + 1}/${this.textChunks.length}: ${escapedText.substring(0, 50)}...`);
-			await this.socket.sendSSML(ssml, uuidv4().replace(/-/g, ''));
+			await this.sendChunk(nextText, statusBar);
 		} else {
 			console.debug('[VoxTrack] All chunks completed');
 			this.isTransferFinished = true;
@@ -201,37 +217,60 @@ export default class VoxTrackPlugin extends Plugin {
 		}
 	}
 
-	private filterMarkdown(text: string): string {
-		return text
-			.replace(/<!--[\s\S]*?-->/g, '')
-			.replace(/%%[\s\S]*?%%/g, '')
-			.replace(/```[\s\S]*?```/g, '')
-			.replace(/!\[([^\]]*)(\([^)]*\))/g, '')
-			.replace(/!\[\[([^\]]*)\]\]/g, '')
-			.replace(/\*\[([^\]]*)\]\([^)]*\)/g, '$1')
-			.replace(/\*\[\[([^\]|]*)\|([^\]]*)\]\]/g, '$2')
-			.replace(/\*\[\[([^\]]*)\]\]/g, '$1')
-			.replace(/\|/g, ' ')
-			.replace(/^\s*[-:\s]+\s*$/gm, '')
-			.replace(/[*_`~=]/g, '')
-			.replace(/^[#>-]+\s*/gm, '')
-			.replace(/\n{3,}/g, '\n\n')
-			.trim();
+	private async sendChunk(text: string, statusBar?: HTMLElement) {
+		const voice = this.settings.voice || 'zh-CN-XiaoxiaoNeural';
+		const rate = this.settings.rate || '+0%';
+		const pitch = this.settings.pitch || '+0Hz';
+		const volume = this.settings.volume || '+0%';
+		const lang = voice.startsWith('zh') ? 'zh-CN' : 'en-US';
+
+		const escapedText = text.replace(/[<>&"']/g, (c) => {
+			switch (c) {
+				case '<': return '&lt;';
+				case '>': return '&gt;';
+				case '&': return '&amp;';
+				case '"': return '&quot;';
+				case "'": return '&apos;';
+				default: return c;
+			}
+		});
+
+		const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='${lang}'><voice name='${voice}'><prosody pitch='${pitch}' rate='${rate}' volume='${volume}'>${escapedText}</prosody></voice></speak>`;
+
+		console.debug(`[VoxTrack] Sending Chunk ${this.currentChunkIndex + 1}/${this.textChunks.length}: ${escapedText.substring(0, 50)}...`);
+		try {
+			await this.socket.sendSSML(ssml, uuidv4().replace(/-/g, ''));
+		} catch (error) {
+			console.error('[VoxTrack] Error sending Chunk:', error);
+			new Notice('VoxTrack: Failed to send text to TTS service');
+			this.stopPlayback(statusBar);
+		}
 	}
 
-	private async togglePlay(editor: Editor, statusBar: HTMLElement) {
+	private async togglePlay(editor: Editor, mode: 'auto' | 'cursor', statusBar: HTMLElement) {
 		if (this.isPlaying) {
 			this.stopPlayback(statusBar);
 			return;
 		}
 
-		let rawText = editor.getSelection();
+		let rawText = '';
 		let startOffset = 0;
-		if (rawText) {
-			startOffset = editor.posToOffset(editor.getCursor('from'));
+
+		if (mode === 'cursor') {
+			const result = getTextFromCursor(editor);
+			rawText = result.text;
+			startOffset = result.offset;
 		} else {
-			rawText = editor.getValue();
-			startOffset = 0;
+			// Auto mode: Selection -> Full Note
+			const selection = getSelectedText(editor);
+			if (selection) {
+				rawText = selection.text;
+				startOffset = selection.offset;
+			} else {
+				const full = getFullText(editor);
+				rawText = full.text;
+				startOffset = full.offset;
+			}
 		}
 
 		if (!rawText.trim()) {
@@ -239,79 +278,53 @@ export default class VoxTrackPlugin extends Plugin {
 			return;
 		}
 
-		if (startOffset === 0) {
-			rawText = rawText.replace(/^\s*-{3}[\s\S]*?-{3}\n?/, '');
-		}
-
 		this.textChunks = [];
 		this.chunkOffsets = [];
 		this.currentChunkIndex = 0;
 
-		const CHUNK_SIZE = 1000;
-		let currentPos = 0;
-		while (currentPos < rawText.length) {
-			let endPos = currentPos + CHUNK_SIZE;
-			if (endPos < rawText.length) {
-				const lastNewline = rawText.lastIndexOf('\n', endPos);
-				if (lastNewline > currentPos + (CHUNK_SIZE / 2)) {
-					endPos = lastNewline;
-				} else {
-					const lastPeriod = rawText.lastIndexOf('. ', endPos);
-					if (lastPeriod > currentPos + (CHUNK_SIZE / 2)) {
-						endPos = lastPeriod + 1;
-					}
-				}
-			}
-			const chunk = rawText.substring(currentPos, endPos);
-			this.textChunks.push(chunk);
-			this.chunkOffsets.push(startOffset + currentPos);
-			currentPos = endPos;
+		const voice = this.settings.voice || 'zh-CN-XiaoxiaoNeural';
+		const lang = voice.startsWith('zh') ? 'zh-CN' : 'en-US';
+
+		const chunks = this.textProcessor.process(rawText, {
+			filterCode: this.settings.filterCode,
+			filterLinks: this.settings.filterLinks,
+			filterMath: this.settings.filterMath,
+			filterFrontmatter: this.settings.filterFrontmatter,
+			filterObsidian: this.settings.filterObsidian,
+			lang: lang
+		});
+
+		if (chunks.length === 0) {
+			new Notice('No speakable text found after filtering');
+			return;
 		}
+
+		this.textChunks = chunks;
+		this.chunkOffsets = new Array(chunks.length).fill(startOffset);
 
 		try {
 			this.player.reset();
 			await this.player.initSource();
-			
+
 			if (statusBar) statusBar.setText('VoxTrack: Connecting...');
 			this.activeEditor = editor;
 			this.isPlaying = true;
 			this.isTransferFinished = false;
 			this.hasShownReceivingNotice = false;
-			this.baseOffset = this.chunkOffsets[0] || 0;
+			this.baseOffset = startOffset;
 
 			this.setupDataHandler(statusBar);
 			await this.socket.connect();
-
-			const firstChunk = this.textChunks[0];
-			if (!firstChunk) return;
-
-			const voice = this.settings.voice || 'zh-CN-XiaoxiaoNeural';
-			const rate = this.settings.rate || '+0%';
-			const pitch = this.settings.pitch || '+0Hz';
-			const volume = this.settings.volume || '+0%';
-			
-			const filteredText = this.filterMarkdown(firstChunk);
-			if (!filteredText.trim()) {
-				console.debug('[VoxTrack] First chunk is empty, trying next');
-				void this.processNextChunk(statusBar);
+			if (!this.isPlaying) {
+				this.socket.close();
 				return;
 			}
-			const escapedText = filteredText.replace(/[<>&"']/g, (c) => {
-				switch (c) {
-					case '<': return '&lt;';
-					case '>': return '&gt;';
-					case '&': return '&amp;';
-					case '"': return '&quot;';
-					case "'": return '&apos;';
-					default: return c;
-				}
-			});
 
-			const lang = voice.startsWith('zh') ? 'zh-CN' : 'en-US';
-			const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='${lang}'><voice name='${voice}'><prosody pitch='${pitch}' rate='${rate}' volume='${volume}'>${escapedText}</prosody></voice></speak>`;
+			if (this.textChunks.length > 0 && this.textChunks[0]) {
+				await this.sendChunk(this.textChunks[0], statusBar);
+			}
 
-			console.debug(`[VoxTrack] Sending Chunk 1/${this.textChunks.length}: ${escapedText.substring(0, 50)}...`);
-			await this.socket.sendSSML(ssml, uuidv4().replace(/-/g, ''));
+			if (!this.isPlaying) return; // Check again
 			if (statusBar) statusBar.setText('VoxTrack: Playing...');
 
 		} catch (e: any) {
@@ -326,6 +339,7 @@ export default class VoxTrackPlugin extends Plugin {
 		this.isTransferFinished = false;
 		if (this.syncInterval) cancelAnimationFrame(this.syncInterval);
 		this.player.stop();
+		this.socket.close();
 		this.syncController.reset();
 
 		if (this.activeEditor) {

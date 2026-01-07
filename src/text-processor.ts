@@ -1,0 +1,174 @@
+
+export interface TextProcessorOptions {
+    filterCode: boolean;
+    filterLinks: boolean;
+    filterMath: boolean;
+    filterFrontmatter: boolean;
+    filterObsidian: boolean;
+    lang: string;
+}
+
+export class TextProcessor {
+    constructor() { }
+
+    public process(text: string, options: TextProcessorOptions): string[] {
+        let processed = text;
+
+        // 1. Structural Filters (Large blocks)
+        if (options.filterFrontmatter) {
+            processed = this.removeFrontmatter(processed);
+        }
+        if (options.filterCode) {
+            processed = this.removeCodeBlocks(processed);
+        }
+        if (options.filterMath) {
+            processed = this.removeMath(processed);
+        }
+        if (options.filterObsidian) {
+            processed = this.removeObsidianSyntax(processed);
+        }
+
+        // 2. Link Processing (Must be before pipe removal)
+        if (options.filterLinks) {
+            processed = this.simplifyLinks(processed);
+        } else {
+            // Basic link cleanup even if keeping text
+            processed = processed.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
+            processed = processed.replace(/\[\[([^\]\|]+)\|([^\]]+)\]\]/g, '$2');
+            processed = processed.replace(/\[\[([^\]]+)\]\]/g, '$1');
+        }
+
+        // 3. Media Removal
+        processed = this.removeMedia(processed);
+
+        // 4. Common Filter (Pipes) - After links
+        processed = this.filterCommon(processed);
+
+        // 5. Structure Cleanup (Headers, Quotes, Lists)
+        // Remove formatting chars except '=' which is needed for symbols
+        processed = processed.replace(/^\s*[-:\s]+\s*$/gm, ''); // Empty list items/dividers
+        processed = processed.replace(/[*_`~]/g, ''); // Markdown format chars (removed = from here)
+        processed = processed.replace(/^[#>-]+\s*/gm, ''); // Headers/Quotes
+
+        // 6. Symbol Replacement (Handle >=, <, etc)
+        processed = this.replaceSymbols(processed, options.lang);
+
+        // 7. Final Cleanup (Orphaned =)
+        processed = processed.replace(/=/g, '');
+        processed = processed.replace(/\n{3,}/g, '\n\n');
+
+        return this.chunk(processed.trim());
+    }
+
+    private removeFrontmatter(text: string): string {
+        return text.replace(/^---[\s\S]*?---\n?/, '');
+    }
+
+    private removeCodeBlocks(text: string): string {
+        return text
+            .replace(/```[\s\S]*?```/g, '')
+            .replace(/`[^`]+`/g, ''); // Inline code
+    }
+
+    private removeMath(text: string): string {
+        return text
+            .replace(/\$\$[\s\S]*?\$\$/g, '')
+            .replace(/\$[^\$]+\$/g, '');
+    }
+
+    private removeObsidianSyntax(text: string): string {
+        return text
+            .replace(/>\s*\[!.*\][^\n]*\n/g, '') // Callout headers
+            .replace(/%%[\s\S]*?%%/g, '') // Comments
+            .replace(/<!--[\s\S]*?-->/g, '') // HTML Comments
+            .replace(/\^[\w-]+/g, ''); // Block IDs
+    }
+
+    private removeMedia(text: string): string {
+        return text
+            .replace(/!\[([^\]]*)\]\([^\)]*\)/g, '')
+            .replace(/!\[\[[^\]]*\]\]/g, '');
+    }
+
+    private filterCommon(text: string): string {
+        return text.replace(/\|/g, ' ');
+    }
+
+    private simplifyLinks(text: string): string {
+        return text.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+            .replace(/\[\[([^\]\|]+)\|([^\]]+)\]\]/g, '$2')
+            .replace(/\[\[([^\]]+)\]\]/g, '$1');
+    }
+
+    private replaceSymbols(text: string, lang: string): string {
+        const isZh = lang.startsWith('zh');
+        const map: Record<string, string> = isZh ? {
+            '<': '小于',
+            '>': '大于',
+            '<=': '小于等于',
+            '>=': '大于等于',
+            '=': '等于',
+            '+': '加'
+        } : {
+            '<': ' less than ',
+            '>': ' greater than ',
+            '<=': ' less than or equal to ',
+            '>=': ' greater than or equal to ',
+            '=': ' equals ',
+            '+': ' plus '
+        };
+
+        let res = text;
+        const keys = Object.keys(map).sort((a, b) => b.length - a.length);
+
+        for (const sym of keys) {
+            const word = map[sym];
+            if (word) {
+                const escapedSym = sym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const re = new RegExp(`(?<=\\s|\\d)${escapedSym}(?=\\s|\\d)`, 'g');
+                res = res.replace(re, word);
+            }
+        }
+
+        return res;
+    }
+
+    private chunk(text: string, maxLen: number = 2500): string[] {
+        if (text.length <= maxLen) return [text];
+
+        const chunks: string[] = [];
+        let remaining = text;
+
+        while (remaining.length > 0) {
+            if (remaining.length <= maxLen) {
+                chunks.push(remaining);
+                break;
+            }
+
+            let cut = maxLen;
+            const checkWindow = Math.floor(maxLen * 0.2);
+
+            let found = remaining.lastIndexOf('\n\n', cut);
+            if (found > cut - checkWindow) {
+                cut = found + 2;
+            } else {
+                found = remaining.lastIndexOf('. ', cut);
+                if (found > cut - checkWindow) {
+                    cut = found + 2;
+                } else {
+                    found = remaining.lastIndexOf(', ', cut);
+                    if (found > cut - checkWindow) cut = found + 2;
+                    else {
+                        found = remaining.lastIndexOf(' ', cut);
+                        if (found > cut - checkWindow) cut = found + 1;
+                    }
+                }
+            }
+
+            chunks.push(remaining.substring(0, cut));
+            remaining = remaining.substring(cut);
+        }
+
+        return chunks;
+    }
+}
