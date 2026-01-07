@@ -407,7 +407,7 @@ export default class VoxTrackPlugin extends Plugin {
 			this.player.reset();
 			await this.player.initSource();
 
-			if (statusBar) statusBar.setText('VoxTrack: Connecting...');
+			this.updateStatus('VoxTrack: Connecting...', false, false);
 			this.activeEditor = editor;
 			this.isPlaying = true;
 			this.isPaused = false;
@@ -427,7 +427,7 @@ export default class VoxTrackPlugin extends Plugin {
 			}
 
 			if (!this.isPlaying) return; // Check again
-			if (statusBar) statusBar.setText('VoxTrack: Playing...');
+			this.updateStatus('VoxTrack: Playing...', true, false);
 
 		} catch (e: any) {
 			console.error('[VoxTrack] Playback Error:', e);
