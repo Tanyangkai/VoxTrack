@@ -24,6 +24,7 @@ export default class VoxTrackPlugin extends Plugin {
 	private syncInterval: number | null = null;
 	private baseOffset: number = 0;
 	private textChunks: string[] = [];
+	private chunkMaps: number[][] = [];
 	private currentChunkIndex: number = 0;
 	private chunkOffsets: number[] = [];
 
@@ -218,16 +219,59 @@ export default class VoxTrackPlugin extends Plugin {
 
 				const docText = this.activeEditor.getValue();
 				const wordToFind = active.text;
-				let foundIndex = docText.indexOf(wordToFind, currentDocOffset);
+				let foundIndex = -1;
 
-				// Fallback 1: Case-insensitive search
+				// 1. Try Precise Map Lookup
+				const currentMap = this.chunkMaps[this.currentChunkIndex];
+				if (currentMap && active.textOffset !== undefined) {
+					// active.textOffset is index in the processed chunk
+					// active.wordLength is length in processed chunk
+					
+					const startIdxInProcessed = active.textOffset;
+					const endIdxInProcessed = active.textOffset + active.wordLength;
+
+					if (startIdxInProcessed < currentMap.length) {
+						const rawStart = currentMap[startIdxInProcessed];
+						
+						// Try to find rawEnd. The end index might be mapped, or we might need to look at the next mapped char.
+						// If endIdxInProcessed is out of bounds (end of string), rawEnd is implied?
+						// We can look at map[endIdxInProcessed] if it exists, else map[endIdxInProcessed - 1] + 1?
+						
+						let rawEnd = -1;
+						if (endIdxInProcessed < currentMap.length) {
+							rawEnd = currentMap[endIdxInProcessed];
+						} else if (currentMap.length > 0) {
+							// End of string, guess based on last char
+							// Note: This might be inaccurate if there are trailing deleted chars, but "word" usually doesn't include them.
+							// Assuming raw chars are contiguous for the word:
+							// We can just calculate length based on content if map fails for end.
+						}
+
+						if (rawStart !== -1) {
+							const absStart = this.baseOffset + rawStart;
+							foundIndex = absStart;
+							
+							// Verify if the text at this location looks vaguely correct (optional, but good for safety)
+							// const potentialMatch = docText.substring(absStart, absStart + 1);
+							// if (potentialMatch.toLowerCase() !== wordToFind[0].toLowerCase()) { ... }
+							// Trust the map for now.
+						}
+					}
+				}
+
+				// Fallback 1: Direct search
+				if (foundIndex === -1) {
+					foundIndex = docText.indexOf(wordToFind, currentDocOffset);
+				}
+
+				// Fallback 2: Case-insensitive search
 				if (foundIndex === -1) {
 					const lowerDoc = docText.toLowerCase();
 					const lowerWord = wordToFind.toLowerCase();
 					foundIndex = lowerDoc.indexOf(lowerWord, currentDocOffset);
 				}
 
-				// Fallback 2: Fuzzy search (strip punctuation from wordToFind)
+				// Fallback 3: Fuzzy search (strip punctuation from wordToFind)
 				// TTS sometimes adds punctuation like commas or periods that aren't in source
 				if (foundIndex === -1) {
 					const cleanWord = wordToFind.replace(/[.,;!?。，；！？、]/g, '');
@@ -240,7 +284,7 @@ export default class VoxTrackPlugin extends Plugin {
 					}
 				}
 
-				// Fallback 3: Overshot Recovery
+				// Fallback 4: Overshot Recovery
 				// If we can't find it forward, check if we skipped it (foundIndex would be < currentDocOffset but > baseOffset)
 				if (foundIndex === -1 && currentDocOffset > this.baseOffset) {
 					// Try searching from baseOffset to see if it's behind us
@@ -261,11 +305,34 @@ export default class VoxTrackPlugin extends Plugin {
 
 				if (foundIndex !== -1) {
 					const from = foundIndex;
-					const cleanWord = wordToFind.replace(/[.,;!?。，；！？、]/g, '');
-					// Determine matched length logic
+					
+					// Determine Length
+					// If we used map, we might know the exact length in raw text
+					// But we only got 'from'.
+					// Let's recalculate 'to'.
+					
 					let matchLen = wordToFind.length;
-					if (docText.substring(from, from + wordToFind.length) !== wordToFind) {
-						matchLen = cleanWord.length;
+					
+					// Use map to find 'to' if possible
+					if (currentMap && active.textOffset !== undefined) {
+						const endIdxInProcessed = active.textOffset + active.wordLength;
+						if (endIdxInProcessed < currentMap.length) {
+							const rawEnd = currentMap[endIdxInProcessed];
+							if (rawEnd !== -1) {
+								const absEnd = this.baseOffset + rawEnd;
+								if (absEnd > from) {
+									matchLen = absEnd - from;
+								}
+							}
+						}
+					}
+					
+					// Fallback length calculation
+					if (docText.substring(from, from + matchLen) !== wordToFind) {
+						const cleanWord = wordToFind.replace(/[.,;!?。，；！？、]/g, '');
+						if (docText.substring(from, from + cleanWord.length) === cleanWord) {
+							matchLen = cleanWord.length;
+						}
 					}
 
 					const to = from + matchLen;
@@ -406,7 +473,8 @@ export default class VoxTrackPlugin extends Plugin {
 			return;
 		}
 
-		this.textChunks = chunks;
+		this.textChunks = chunks.map(c => c.text);
+		this.chunkMaps = chunks.map(c => c.map);
 		this.chunkOffsets = new Array(chunks.length).fill(startOffset);
 
 		try {

@@ -8,10 +8,15 @@ export interface TextProcessorOptions {
     lang: string;
 }
 
+export interface ProcessedChunk {
+    text: string;
+    map: number[];
+}
+
 export class TextProcessor {
     constructor() { }
 
-    public process(text: string, options: TextProcessorOptions): string[] {
+    public process(text: string, options: TextProcessorOptions): ProcessedChunk[] {
         let processed = text;
 
         // 1. Structural Filters (Large blocks)
@@ -60,7 +65,46 @@ export class TextProcessor {
         // processed = processed.replace(/=/g, ''); // REMOVED: Breaks >=, <=, etc.
         processed = processed.replace(/\n{3,}/g, '\n\n');
 
-        return this.chunk(processed.trim());
+        // Trim first to ensure clean start/end
+        const trimmed = processed.trim();
+        const map = this.computeSourceMap(text, trimmed);
+
+        return this.chunk(trimmed, map);
+    }
+
+    private computeSourceMap(raw: string, processed: string): number[] {
+        const map: number[] = new Array(processed.length).fill(-1);
+        let rawIdx = 0;
+
+        for (let procIdx = 0; procIdx < processed.length; procIdx++) {
+            const procChar = processed[procIdx];
+            
+            // Potential raw candidates for the current procChar:
+            // 1. procChar itself
+            // 2. If procChar is '\n', raw could be '|'
+            // 3. If procChar is ' ', raw could be '*', '_', '`', '~'
+            
+            const candidates = [procChar];
+            if (procChar === '\n') candidates.push('|');
+            if (procChar === ' ') candidates.push('*', '_', '`', '~');
+            
+            let bestMatchIdx = -1;
+            let minDist = Infinity;
+            
+            for (const cand of candidates) {
+                const found = raw.indexOf(cand, rawIdx);
+                if (found !== -1 && found < minDist) {
+                    minDist = found;
+                    bestMatchIdx = found;
+                }
+            }
+            
+            if (bestMatchIdx !== -1) {
+                map[procIdx] = bestMatchIdx;
+                rawIdx = bestMatchIdx + 1;
+            }
+        }
+        return map;
     }
 
     private removeFrontmatter(text: string): string {
@@ -136,15 +180,16 @@ export class TextProcessor {
     //     return res;
     // }
 
-    private chunk(text: string, maxLen: number = 2500): string[] {
-        if (text.length <= maxLen) return [text];
+    private chunk(text: string, map: number[], maxLen: number = 2500): ProcessedChunk[] {
+        if (text.length <= maxLen) return [{ text, map }];
 
-        const chunks: string[] = [];
+        const chunks: ProcessedChunk[] = [];
         let remaining = text;
+        let remainingMap = map;
 
         while (remaining.length > 0) {
             if (remaining.length <= maxLen) {
-                chunks.push(remaining);
+                chunks.push({ text: remaining, map: remainingMap });
                 break;
             }
 
@@ -168,8 +213,12 @@ export class TextProcessor {
                 }
             }
 
-            chunks.push(remaining.substring(0, cut));
+            chunks.push({
+                text: remaining.substring(0, cut),
+                map: remainingMap.slice(0, cut)
+            });
             remaining = remaining.substring(cut);
+            remainingMap = remainingMap.slice(cut);
         }
 
         return chunks;
