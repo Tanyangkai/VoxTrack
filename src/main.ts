@@ -290,6 +290,9 @@ export default class VoxTrackPlugin extends Plugin {
 					}
 				} else {
 					console.warn(`[VoxTrack] Sync: Could not find "${wordToFind}" after ${currentDocOffset} (base: ${this.baseOffset})`);
+					// Debug context
+					const context = docText.substring(currentDocOffset, Math.min(currentDocOffset + 50, docText.length));
+					console.debug(`[VoxTrack] Sync Context: Next 50 chars in doc: "${context}"`);
 				}
 			}
 
