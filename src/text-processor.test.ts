@@ -101,5 +101,10 @@ Content`;
         expect(result[0]).not.toContain('---'); // Should remove separators
     });
 
+    test('removes emojis', () => {
+        const input = 'Start 🏗️ End';
+        const result = processor.process(input, defaultOptions);
+        expect(result[0]).toBe('Start  End');
+    });
 
 });
