@@ -6,7 +6,7 @@ export interface VoxTrackSettings {
     rate: string;
     pitch: string;
     volume: string;
-    autoScroll: boolean;
+    autoScrollMode: 'off' | 'center' | 'cursor';
     highlightMode: 'word' | 'sentence' | 'none';
     clickToPlay: boolean;
     filterCode: boolean;
@@ -21,7 +21,7 @@ export const DEFAULT_SETTINGS: VoxTrackSettings = {
     rate: "+0%",
     pitch: "+0Hz",
     volume: "+0%",
-    autoScroll: true,
+    autoScrollMode: 'cursor', // Default to cursor for best Live Preview support
     highlightMode: 'word',
     clickToPlay: false,
     filterCode: true,
@@ -139,12 +139,15 @@ export class VoxTrackSettingTab extends PluginSettingTab {
             .setHeading();
 
         new Setting(containerEl)
-            .setName('Auto scroll')
-            .setDesc('Automatically scroll the editor to follow the speech')
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.autoScroll)
+            .setName('Auto scroll mode')
+            .setDesc('How the editor should follow the speech')
+            .addDropdown(dropdown => dropdown
+                .addOption('off', 'Off')
+                .addOption('center', 'Scroll only (Keep cursor)')
+                .addOption('cursor', 'Scroll & Move Cursor (Recommended for LP Tables)')
+                .setValue(this.plugin.settings.autoScrollMode)
                 .onChange(async (value) => {
-                    this.plugin.settings.autoScroll = value;
+                    this.plugin.settings.autoScrollMode = value as any;
                     await this.plugin.saveSettings();
                 }));
 

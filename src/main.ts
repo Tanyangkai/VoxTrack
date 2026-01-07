@@ -273,13 +273,16 @@ export default class VoxTrackPlugin extends Plugin {
 
 					const view = (this.activeEditor as any).cm || (this.activeEditor as any).editor?.cm || (this.activeEditor as any).view;
 					if (view && view.dispatch) {
+						const shouldScroll = this.settings.autoScrollMode !== 'off';
+						const shouldMoveCursor = this.settings.autoScrollMode === 'cursor';
+
 						const transaction: any = {
 							effects: setActiveRange.of({ from, to }),
-							scrollIntoView: this.settings.autoScroll
+							scrollIntoView: shouldScroll
 						};
 
-						// If autoScroll is on, also move cursor to ensure Live Preview renders Source Mode for tables
-						if (this.settings.autoScroll) {
+						// If mode is 'cursor', move cursor to ensure Live Preview renders Source Mode for tables
+						if (shouldMoveCursor) {
 							transaction.selection = { anchor: to };
 						}
 
@@ -480,6 +483,16 @@ export default class VoxTrackPlugin extends Plugin {
 
 	public async loadSettings(): Promise<void> {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+
+		// Migration: autoScroll (boolean) -> autoScrollMode (string)
+		if ('autoScroll' in this.settings) {
+			const legacySettings = this.settings as any;
+			if (typeof legacySettings.autoScroll === 'boolean') {
+				this.settings.autoScrollMode = legacySettings.autoScroll ? 'cursor' : 'off';
+				delete legacySettings.autoScroll;
+				await this.saveSettings();
+			}
+		}
 	}
 
 	public async saveSettings(): Promise<void> {
