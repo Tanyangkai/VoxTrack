@@ -42,4 +42,11 @@ export class SyncController {
     reset(): void {
         this.metadata = [];
     }
+
+    getLastEndTime(): number {
+        if (this.metadata.length === 0) return 0;
+        const last = this.metadata[this.metadata.length - 1];
+        if (!last) return 0;
+        return last.offset + last.duration;
+    }
 }

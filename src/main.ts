@@ -27,6 +27,7 @@ export default class VoxTrackPlugin extends Plugin {
 	private chunkMaps: number[][] = [];
 	private currentChunkIndex: number = 0;
 	private chunkOffsets: number[] = [];
+	private audioTimeOffset: number = 0;
 
 	// Status Bar Elements
 	private statusBarItemEl: HTMLElement;
@@ -178,6 +179,11 @@ export default class VoxTrackPlugin extends Plugin {
 							const jsonObj = JSON.parse(jsonStr);
 							const metadata = parseMetadata(jsonObj);
 							if (metadata.length > 0) {
+								if (this.audioTimeOffset > 0) {
+									for (const m of metadata) {
+										m.offset += this.audioTimeOffset;
+									}
+								}
 								this.syncController.addMetadata(metadata);
 							}
 						} catch (e) {
@@ -185,6 +191,7 @@ export default class VoxTrackPlugin extends Plugin {
 						}
 					}
 				} else if (text.includes('Path:turn.end')) {
+					this.audioTimeOffset = this.syncController.getLastEndTime();
 					void this.processNextChunk(statusBar);
 				}
 			}
@@ -505,6 +512,7 @@ export default class VoxTrackPlugin extends Plugin {
 			this.isTransferFinished = false;
 			this.hasShownReceivingNotice = false;
 			this.baseOffset = startOffset;
+			this.audioTimeOffset = 0;
 
 			this.setupDataHandler(statusBar);
 			await this.socket.connect();
