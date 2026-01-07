@@ -49,7 +49,8 @@ export class TextProcessor {
         // 5. Structure Cleanup (Headers, Quotes, Lists)
         // Remove formatting chars except '=' which is needed for symbols
         processed = processed.replace(/^\s*[-:\s]+\s*$/gm, ''); // Empty list items/dividers
-        processed = processed.replace(/[*_`~]/g, ''); // Markdown format chars (removed = from here)
+        // Replace formatting chars with space to prevent concatenating words (e.g. A*B -> AB)
+        processed = processed.replace(/[*_`~]/g, ' '); 
         processed = processed.replace(/^[#>-]+\s*/gm, ''); // Headers/Quotes
 
         // 6. Symbol Replacement (Handle >=, <, etc)
