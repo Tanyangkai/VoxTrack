@@ -1,11 +1,11 @@
 {
 	"id": "voxtrack",
 	"name": "VoxTrack",
-	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
-	"description": "True-to-life TTS experience with high-precision text tracking and highlighting for Obsidian.",
+	"description": "High-precision Text-to-Speech (TTS) plugin for Obsidian tracking reading progress word-by-word with natural voices.",
 	"author": "Antigravity",
 	"authorUrl": "",
 	"fundingUrl": "",
-	"isDesktopOnly": false
+	"isDesktopOnly": false,
+	"version": "1.0.1"
 }

@@ -1,5 +1,8 @@
 # VoxTrack 开发规范
 
+> [!NOTE]
+> **Version**: v1.0.1 | **Last Updated**: 2026-01-07 | **Status**: Stable
+
 > [!IMPORTANT]
 > 本文档是 `VoxTrack` 项目的 **唯一事实来源 (Single Source of Truth)**。所有代码必须严格遵守本文档定义的约束和架构。
 
@@ -21,6 +24,13 @@
 2. **[精准同步]**: 相比传统基于语速估算的同步方案，通过 Metadata 实现**毫秒级**音画同步，解决不同语速下的错位问题。
 3. **[非破坏性]**: 坚持“数据安全第一”，所有视觉效果均为渲染层 overlay，确保笔记数据的纯净与安全。
 
+### 0.3 技术亮点
+
+* **Edge TTS Protocol**: 深度适配 Edge 浏览器同款语音协议，免费获取商业级语音合成效果。
+* **Zero-Overhead Sync**: 基于 `HTMLAudioElement` 时间轴和预计算 `TimeMap` 的高效同步。
+* **MediaSource Extensions (MSE)**: 使用流式播放技术，支持低延迟的音频数据追加和播放。
+* **Virtual DOM Rendering**: 利用 CodeMirror 6 的 ViewPlugin 机制，仅渲染视口可见区域的高亮，支持像 Canvas 一样流畅处理十万字长文。
+
 ## 1. 工程约束
 
 ### 1.1 技术栈
@@ -29,6 +39,7 @@
 * **核心库**:
   * `CodeMirror 6` (@codemirror/view, @codemirror/state): Obsidian 编辑器底层 API，核心高亮实现依赖。
   * `WebSocket` (Native API / `ws`): 用于与 Edge TTS 服务建立长连接。
+  * `MediaSource Extensions` (MSE): 用于处理流式音频数据。
   * `Intl.Segmenter` (Native API): 用于高性能、符合语言习惯的本地文本断句。
 
 * **测试**: Jest (单元测试) + Obsidian E2E (手动验收)
@@ -55,7 +66,7 @@
 ```mermaid
 graph TD
     subgraph Core [核心逻辑层]
-        TTS[TTS Engine] -->|Stream & Metadata| Buffer[Audio Buffer & TimeMap]
+        TTS[TTS Engine] -->|Stream & Metadata| Buffer[MediaSource & SourceBuffer]
         Sync[Sync Controller] -->|Poll Time| Buffer
     end
     
@@ -69,7 +80,7 @@ graph TD
 ```
 
 * **Data Layer (TTS Engine)**: 负责协议适配 (Edge TTS Protocol)、WebSocket 通信、音频流解码及元数据解析。
-* **Control Layer (Sync Controller)**: 系统的“指挥家”。维护播放状态，通过 `rAF` 循环比对 `AudioContext.currentTime` 与 `TimeMap`，计算当前活跃的文本 Range。
+* **Control Layer (Sync Controller)**: 系统的“指挥家”。维护播放状态，通过 `rAF` 循环比对 `Audio.currentTime` 与 `TimeMap`，计算当前活跃的文本 Range。
 * **View Layer (Editor Integrator)**: 封装 CodeMirror 插件逻辑。接收 Control 层发出的状态变更 (`StateEffect`)，更新 `StateField`，最终映射为编辑器的 CSS Classes。
 
 ## 3. 核心模块规范
@@ -93,7 +104,7 @@ interface AudioMetadata {
   1. **握手**: 建立 WebSocket 连接，发送必要的配置头 (SpeechConfig)。
   2. **请求**: 构建 SSML (Speech Synthesis Markup Language)，确保请求包含 `wordBoundary` 事件以便获取时间戳。
   3. **流处理**:
-     * 二进制帧 -> 拼接/解码 -> `AudioBuffer`
+     * 二进制帧 -> `SourceBuffer` (MSE)
      * 文本帧 -> JSON Parse -> `AudioMetadata[]`
 
 * **约束**:
@@ -206,27 +217,36 @@ npm run dev
 
 ### 7.2 测试策略
 
-1. **Unit Test**: 针对 SSML Parser 和 Time Mapper 编写纯 JS 单元测试。
-2. **Manual Test**:
-   * **Case 1**: 长文本 (>5000字) 播放，观察内存和分段加载是否流畅。
-   * **Case 2**: 在播放过程中快速编辑文本，确认高亮是否错位或导致报错 (应该自动停止或重新计算)。
-   * **Case 3**: 网络断开场景下的错误提示。
+#### 7.2.1 单元测试 (Unit Tests)
+针对核心逻辑模块编写 Jest 测试用例，覆盖率目标 > 80%。
+* **SSML Parser**: 验证特殊字符转义、分段切割逻辑的正确性。
+* **TimeMapper**: 测试二分查找算法在边界条件（头部、尾部、空数据）下的表现。
+* **Protocol**: 验证 WebSocket 握手包和心跳包格式是否符合 Edge 协议。
+
+#### 7.2.2 集成测试 (Integration Tests)
+* **TTS Flow**: 模拟 WebSocket 消息流，验证 `AudioBuffer` 拼接和 `Metadata` 解析的连贯性。
+* **Sync Logic**: 模拟 `Audio` 时间推进，验证 `SyncController` 状态流转（Idle -> Buffering -> Playing）。
+
+#### 7.2.3 手动验收 (E2E & Acceptance)
+* **[Perf] 长文本压力测试**: 导入 50,000 字文档，连续播放 30 分钟，监控内存泄漏 (<100MB) 和 FPS (>30)。
+* **[Interact] 编辑干扰**: 在播放时进行增删改操作，验证高亮是否通过 `update` 事务正确重对齐或优雅停止。
+* **[Robust] 弱网模拟**: 使用 Network Throttling 模拟高延迟和断网，验证重试机制和错误提示 toast。
 
 ## 8. 目录结构
 
 ```text
 VoxTrack/
-├── main.ts                 # 插件入口 (Plugin Lifecycle)
 ├── manifest.json           # 插件元数据
 ├── styles.css              # 样式文件 (UI & Highlights)
 ├── esbuild.config.mjs      # 构建配置
 ├── src/
+│   ├── main.ts             # 插件入口 (Plugin Lifecycle)
 │   ├── api/                # TTS API Layer
 │   │   ├── edge-socket.ts  # WebSocket Wrapper
 │   │   └── protocol.ts     # Protocol Constants
 │   ├── audio/              # Audio Handling
-│   │   ├── player.ts       # AudioContext Wrapper
-│   │   └── buffer.ts       # Chunk Manager
+│   │   ├── player.ts       # Audio/MSE Wrapper
+│   │   └── buffer.ts       # [Removed]
 │   ├── editor/             # CodeMirror Integration
 │   │   ├── extensions.ts   # Editor Extensions Entry
 │   │   └── decorations.ts  # Visual Logic
@@ -245,17 +265,80 @@ VoxTrack/
 * **架构变更**: 如更换 TTS 源或重构同步逻辑，**必须**先更新本 Spec 的 `系统架构` 和 `核心模块` 章节。
 * **配置变更**: 新增 Settings 选项时，同步更新 `4.1 配置文件` 章节。
 
-## 10. 附录
+## 10. 错误处理规范
 
-### 10.1 术语表
+### 10.1 错误分类
+系统定义以下标准错误类型（Error Code）：
+* **E100 (Network)**: WebSocket 连接失败、超时或被服务端断开。
+* **E200 (Protocol)**: 握手失败、鉴权不通过或 SSML 格式错误。
+* **E300 (Audio)**: `MediaSource` 或 `SourceBuffer` 错误。
+* **E400 (Internal)**: 状态机非法流转或核心数据丢失。
+
+### 10.2 处理策略
+* **自动重试**: 对 E100 类错误，执行指数退避重试（Delay: 1s, 2s, 5s），最多 3 次。
+* **优雅降级**: 若重试失败，自动通过 `Notice` 提示用户，并重置播放状态为 `Idle`，**严禁抛出未捕获异常导致插件崩溃**。
+* **静默恢复**: 播放过程中的轻微丢帧或 Metadata 缺失，应跳过当前词继续播放，不打断体验。
+
+### 10.3 用户提示
+使用 Obsidian `Notice` API：
+* Info: "Connecting to neural voice..."
+* Warning: "Network unstable, buffering..."
+* Error: "Playback failed: Connection timeout. Please check your network."
+
+## 11. 性能要求
+
+### 11.1 关键指标 (KPIs)
+* **同步延迟**: Audio/Visual 偏差 < **50ms**。
+* **内存占用**: 播放时 Heap 增量 < **100MB**，停止后 10s 内 GC 回收。
+* **帧率**: 高亮更新 FPS > **30** (即使在 Mobile 设备上)。
+* **启动耗时**: 点击播放到出声 < **1.5s** (Cold boot), < **0.5s** (Hot w/ buffer)。
+
+### 11.2 优化策略
+* **Web Worker**: 将 SSML 解析和 Base64 解码移至 Worker 线程（未来规划）。
+* **SourceBuffer Queue**: 管理 MSE Buffer 队列，避免溢出。
+* **Lazy Loading**: 长文仅请求前 3 段，播放过程中预加载后续段落。
+
+## 12. 安全性规范
+
+### 12.1 连接安全
+* 所有外部请求必须通过 **HTTPS/WSS** 加密传输。
+* 不收集任何用户文档内容上传至非 TTS 必须的第三方服务器。
+
+### 12.2 数据隐私
+* 发送给 Edge TTS 的文本仅用于合成，不包含用户笔记的元数据（如文件名、Vault 路径）。
+* 插件设置中的敏感信息（如有）应加密存储或使用 `Password` 类型的 Input。
+
+## 13. 国际化与可访问性
+
+### 13.1 国际化 (i18n)
+* 插件 UI 字符串提取到 `lang/` 目录，支持 `en` 和 `zh-cn`。
+* TTS 语音列表根据 Obsidian 语言设置优先展示本地语言 Voice。
+
+### 13.2 可访问性 (A11y)
+* **Keyboard First**: 所有功能（播放、暂停、设置）必须通过键盘可达。
+* **Screen Reader**: 播放状态变更时，适当触发 ARIA live region 更新（虽然是 TTS 插件，UI 仍需 A11y）。
+* **Focus Management**: 弹窗关闭后焦点正确归还编辑器。
+
+## 14. 附录
+
+### 14.1 变更日志 (Changelog)
+* **v1.0.1 (2026-01-07)**:
+    * 更新项目元数据与文档。
+* **v1.0.0 (2026-01-07)**:
+    * 初始版本发布。
+    * 定义核心架构：MVVM, Edge TTS WebSocket, CodeMirror 6 Decoration。
+    * 确立性能和容错标准。
+
+### 14.2 术语表
 
 | 术语 | 定义 |
 | :--- | :--- |
 | **SSML** | Speech Synthesis Markup Language，语音合成标记语言，用于控制 TTS 的发音细节。 |
 | **Decoration** | CodeMirror 6 的概念，用于改变文档外观而不修改内容的机制。 |
 | **Gutter** | 编辑器左侧显示行号的区域。 |
+| **Chunking** | 长文本切分策略，用于规避 TTS 服务单次请求字符限制。 |
 
-### 10.2 参考资料
+### 14.3 参考资料
 
 * [Microsoft Edge TTS Protocol Analysis](https://github.com/rany2/edge-tts)
 * [Obsidian Plugin API](https://github.com/obsidianmd/obsidian-api)

@@ -1,7 +1,7 @@
 {
 	"name": "voxtrack",
-	"version": "1.0.0",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"version": "1.0.1",
+	"description": "High-precision Text-to-Speech (TTS) plugin for Obsidian tracking reading progress word-by-word with natural voices.",
 	"main": "main.js",
 	"type": "module",
 	"scripts": {
@@ -11,7 +11,14 @@
 		"lint": "eslint .",
 		"test": "jest"
 	},
-	"keywords": [],
+	"keywords": [
+		"obsidian-plugin",
+		"tts",
+		"text-to-speech",
+		"accessibility",
+		"voice",
+		"read-aloud"
+	],
 	"license": "0-BSD",
 	"devDependencies": {
 		"@codemirror/state": "^6.5.3",
