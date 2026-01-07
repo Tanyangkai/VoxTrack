@@ -182,6 +182,11 @@ export default class VoxTrackPlugin extends Plugin {
 								if (this.audioTimeOffset > 0) {
 									for (const m of metadata) {
 										m.offset += this.audioTimeOffset;
+										m.chunkIndex = this.currentChunkIndex;
+									}
+								} else {
+									for (const m of metadata) {
+										m.chunkIndex = this.currentChunkIndex;
 									}
 								}
 								this.syncController.addMetadata(metadata);
@@ -219,6 +224,17 @@ export default class VoxTrackPlugin extends Plugin {
 			const active = this.syncController.findActiveMetadata(time);
 
 			if (active && active !== lastActive && this.activeEditor) {
+                // DEBUG: Temporary log to diagnose sync offset
+                // console.log('[VoxTrack] Sync Debug:', {
+                //     time: time.toFixed(3),
+                //     chunkIdx: active.chunkIndex,
+                //     currentChunkIdx: this.currentChunkIndex,
+                //     textOffset: active.textOffset,
+                //     word: active.text,
+                //     mapLen: (active.chunkIndex !== undefined && this.chunkMaps[active.chunkIndex]) ? this.chunkMaps[active.chunkIndex].length : -1,
+                //     rawMapVal: (active.chunkIndex !== undefined && this.chunkMaps[active.chunkIndex]) ? this.chunkMaps[active.chunkIndex][active.textOffset] : -1
+                // });
+
 				if (lastActive === null || active.offset < lastActive.offset) {
 					currentDocOffset = this.baseOffset;
 				}
@@ -229,7 +245,11 @@ export default class VoxTrackPlugin extends Plugin {
 				let foundIndex = -1;
 
 				// 1. Try Precise Map Lookup
-				const currentMap = this.chunkMaps[this.currentChunkIndex];
+				// Use the chunkIndex stored in metadata to find the correct map
+				const mapIndex = active.chunkIndex !== undefined ? active.chunkIndex : this.currentChunkIndex;
+				const currentMap = this.chunkMaps[mapIndex];
+				const chunkBaseOffset = this.chunkOffsets[mapIndex] || 0;
+				
 				if (currentMap && active.textOffset !== undefined) {
 					// active.textOffset is index in the processed chunk
 					// active.wordLength is length in processed chunk
@@ -258,7 +278,7 @@ export default class VoxTrackPlugin extends Plugin {
 						}
 
 						if (rawStart !== undefined && rawStart !== -1) {
-							const absStart = this.baseOffset + rawStart;
+							const absStart = chunkBaseOffset + rawStart;
 							foundIndex = absStart;
 							
 							// Verify if the text at this location looks vaguely correct (optional, but good for safety)
@@ -296,16 +316,16 @@ export default class VoxTrackPlugin extends Plugin {
 
 				// Fallback 4: Overshot Recovery
 				// If we can't find it forward, check if we skipped it (foundIndex would be < currentDocOffset but > baseOffset)
-				if (foundIndex === -1 && currentDocOffset > this.baseOffset) {
+				if (foundIndex === -1 && currentDocOffset > chunkBaseOffset) {
 					// Try searching from baseOffset to see if it's behind us
-					const recoveryIndex = docText.indexOf(wordToFind, this.baseOffset);
+					const recoveryIndex = docText.indexOf(wordToFind, chunkBaseOffset);
 					if (recoveryIndex !== -1 && recoveryIndex < currentDocOffset) {
 						foundIndex = recoveryIndex;
 					} else {
 						// Try fuzzy recovery
 						const cleanWord = wordToFind.replace(/[.,;!?。，；！？、]/g, '');
 						if (cleanWord.length > 0) {
-							const fuzzyRecoveryIndex = docText.indexOf(cleanWord, this.baseOffset);
+							const fuzzyRecoveryIndex = docText.indexOf(cleanWord, chunkBaseOffset);
 							if (fuzzyRecoveryIndex !== -1 && fuzzyRecoveryIndex < currentDocOffset) {
 								foundIndex = fuzzyRecoveryIndex;
 							}
@@ -329,7 +349,7 @@ export default class VoxTrackPlugin extends Plugin {
 						if (endIdxInProcessed < currentMap.length) {
 							const rawEnd = currentMap[endIdxInProcessed];
 							if (rawEnd !== undefined && rawEnd !== -1) {
-								const absEnd = this.baseOffset + rawEnd;
+								const absEnd = chunkBaseOffset + rawEnd;
 								if (absEnd > from) {
 									matchLen = absEnd - from;
 								}
@@ -380,7 +400,7 @@ export default class VoxTrackPlugin extends Plugin {
 						view.dispatch(transaction);
 					}
 				} else {
-					console.warn(`[VoxTrack] Sync: Could not find "${wordToFind}" after ${currentDocOffset} (base: ${this.baseOffset})`);
+					console.warn(`[VoxTrack] Sync: Could not find "${wordToFind}" after ${currentDocOffset} (base: ${chunkBaseOffset})`);
 					// Debug context
 					const context = docText.substring(currentDocOffset, Math.min(currentDocOffset + 50, docText.length));
 					console.debug(`[VoxTrack] Sync Context: Next 50 chars in doc: "${context}"`);

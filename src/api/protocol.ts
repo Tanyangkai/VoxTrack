@@ -6,6 +6,7 @@ export interface AudioMetadata {
     text: string;
     textOffset: number;
     wordLength: number;
+    chunkIndex?: number;
 }
 
 interface EdgeMetadataData {
