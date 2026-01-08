@@ -2,19 +2,23 @@
 
 VoxTrack is a high-precision Text-to-Speech (TTS) plugin for Obsidian that tracks your reading progress word-by-word with natural-sounding voices powered by Edge TTS.
 
-![VoxTrack Demo](https://via.placeholder.com/800x400?text=VoxTrack+Demo+GIF+Placeholder) <!-- TODO: Replace with real GIF -->
+![VoxTrack Demo](demo.gif)
 
 ## ✨ Features
 
 - **Word-Level Tracking**: Real-time highlighting of the exact word being spoken.
 - **Natural Voices**: Support for high-quality Microsoft Edge TTS neural voices.
 - **Adaptive Buffer Management**: Smoothly handles ultra-long documents without memory issues or crashes.
-- **Table Support**: Intelligent handling of Markdown tables for seamless reading.
+- **Intelligent Content Filtering**: 
+  - Automatically skips YAML Frontmatter, Code blocks, and LaTeX formulas.
+  - Cleans up Markdown links and internal Obsidian syntax for a natural reading flow.
+- **Table Support**: Specialized handling of Markdown tables for seamless listening.
 - **Customizable Experience**:
-  - **Playback Speed**: Adjust speed from 0.5x to 3.0x on the fly.
-  - **Highlight Modes**: Toggle between Word, Sentence, or no highlighting.
+  - **Playback Speed**: Adjust speed from 0.5x to 3.0x in real-time.
+  - **Highlight Modes**: Toggle between Word, Sentence, or No highlighting.
   - **Color Presets**: Choose from Yellow, Green, Blue, Purple, or Red highlighters.
-  - **Auto-Scroll**: Automatically follows the speech, with optional cursor movement.
+  - **Auto-Scroll**: Automatically follows the speech, with optional cursor movement (ideal for Live Preview tables).
+- **Internationalization**: Full support for English and Simplified Chinese (简体中文).
 
 ## 🚀 Getting Started
 
