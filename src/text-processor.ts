@@ -70,8 +70,8 @@ export class TextProcessor {
         ts.replace(/\|/g, ', '); 
 
         // 5. Structure Cleanup
-        // Empty list items/dividers
-        ts.remove(/^\s*[-:\s]+\s*$/m); 
+        // Empty list items/dividers (now including commas from pipe replacement)
+        ts.remove(/^\s*[-:,\s]+\s*$/m); 
         
         // Formatting chars: * _ ` ~ -> space
         ts.replace(/[*_`~]/, ' ');
