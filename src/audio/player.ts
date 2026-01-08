@@ -7,7 +7,6 @@ export class AudioPlayer {
     private isStopped = false;
     private isInputFinished = false;
     private onCompleteCallback: (() => void) | null = null;
-    private lastQueueWarningTime = 0;
 
     constructor() {
         this.audio = new Audio();
@@ -110,14 +109,6 @@ export class AudioPlayer {
                 this.sourceBuffer.remove(buffered.start(0), removeEnd);
             } catch (e) {
                 console.error('[VoxTrack] Buffer cleanup failed', e);
-            }
-        } else {
-            // Memory threshold warning: If queue grows too large (> 100MB roughly)
-            const estimatedQueueSize = this.queue.length * 32000; // Average chunk size
-            const now = Date.now();
-            if (estimatedQueueSize > 100 * 1024 * 1024 && now - this.lastQueueWarningTime > 10000) {
-                console.warn('[VoxTrack] Audio RAM queue is getting large. Playback might be too slow.');
-                this.lastQueueWarningTime = now;
             }
         }
     }

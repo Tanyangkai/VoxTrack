@@ -188,48 +188,75 @@ export default class VoxTrackPlugin extends Plugin {
 										m.offset += this.audioTimeOffset;
 										m.chunkIndex = this.currentChunkIndex;
 
-										// Auto-correct Text Offset
-										if (currentChunkText) {
-											const found = currentChunkText.indexOf(m.text, this.chunkScanOffset);
-											if (found !== -1) {
-                                                // console.log(`[VoxTrack] Correction: "${m.text}" found at ${found} (was ${m.textOffset}, scan ${this.chunkScanOffset})`);
-												
-												// Try to expand selection to full word if it looks like a partial match
-												const expanded = this.expandWordSelection(currentChunkText, found, m.wordLength);
-												m.textOffset = expanded.start;
-												m.wordLength = expanded.length;
-												m.text = currentChunkText.substring(expanded.start, expanded.start + expanded.length);
+										                                        // Auto-correct Text Offset
 
-												// Advance scan offset, ensuring we don't skip too much if words overlap (unlikely)
-												// Use a safe increment.
-												                                                // Use a safe increment.
-																						this.chunkScanOffset = found + 1; 
-																					} else {
-												                                                console.debug(`[VoxTrack] Correction Failed: "${m.text}" not found after ${this.chunkScanOffset}`);
-												                                            }
-																					}									}
-								} else {
-									for (const m of metadata) {
-										m.chunkIndex = this.currentChunkIndex;
+										                                        if (currentChunkText) {
+
+										                                            const searchText = this.unescapeHtml(m.text);
+
+										                                            const found = currentChunkText.indexOf(searchText, this.chunkScanOffset);
+
+										                                            if (found !== -1) {
+
+										                                                // Try to expand selection to full word if it looks like a partial match
+
+										                                                const expanded = this.expandWordSelection(currentChunkText, found, searchText.length);
+
+										                                                m.textOffset = expanded.start;
+
+										                                                m.wordLength = expanded.length;
+
+										                                                m.text = currentChunkText.substring(expanded.start, expanded.start + expanded.length);
+
 										
-										// Auto-correct Text Offset
-										if (currentChunkText) {
-											const found = currentChunkText.indexOf(m.text, this.chunkScanOffset);
-											if (found !== -1) {
-                                                // console.log(`[VoxTrack] Correction: "${m.text}" found at ${found} (was ${m.textOffset}, scan ${this.chunkScanOffset})`);
-												
-												const expanded = this.expandWordSelection(currentChunkText, found, m.wordLength);
-												m.textOffset = expanded.start;
-												m.wordLength = expanded.length;
-												m.text = currentChunkText.substring(expanded.start, expanded.start + expanded.length);
 
-												                                                // Use a safe increment.
-																						this.chunkScanOffset = found + 1; 
-																					} else {
-												                                                console.debug(`[VoxTrack] Correction Failed: "${m.text}" not found after ${this.chunkScanOffset}`);
-												                                            }
-																					}									}
-								}
+										                                                // Advance scan offset
+
+										                                                this.chunkScanOffset = found + 1; 
+
+										                                            }
+
+										                                        }
+
+										                                    }
+
+										                                } else {
+
+										                                    for (const m of metadata) {
+
+										                                        m.chunkIndex = this.currentChunkIndex;
+
+										                                        
+
+										                                        // Auto-correct Text Offset
+
+										                                        if (currentChunkText) {
+
+										                                            const searchText = this.unescapeHtml(m.text);
+
+										                                            const found = currentChunkText.indexOf(searchText, this.chunkScanOffset);
+
+										                                            if (found !== -1) {
+
+										                                                const expanded = this.expandWordSelection(currentChunkText, found, searchText.length);
+
+										                                                m.textOffset = expanded.start;
+
+										                                                m.wordLength = expanded.length;
+
+										                                                m.text = currentChunkText.substring(expanded.start, expanded.start + expanded.length);
+
+										
+
+										                                                this.chunkScanOffset = found + 1;
+
+										                                            }
+
+										                                        }
+
+										                                    }
+
+										                                }
 								this.syncController.addMetadata(metadata);
 							}
 						} catch (e) {
@@ -696,6 +723,15 @@ export default class VoxTrackPlugin extends Plugin {
 		}
 		// Add selected color class
 		document.body.classList.add(`voxtrack-color-${this.settings.highlightColor || 'yellow'}`);
+	}
+
+	private unescapeHtml(text: string): string {
+		return text
+			.replace(/&amp;/g, '&')
+			.replace(/&lt;/g, '<')
+			.replace(/&gt;/g, '>')
+			.replace(/&quot;/g, '"')
+			.replace(/&apos;/g, "'");
 	}
 
 	private updateStatus(text: string, isPlaying: boolean, isPaused: boolean) {
