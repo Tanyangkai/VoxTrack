@@ -4,6 +4,7 @@ export class AudioPlayer {
     private sourceBuffer: SourceBuffer | null = null;
     private queue: Uint8Array[] = [];
     private isPlaying = false;
+    private isStopped = false;
     private isInputFinished = false;
     private onCompleteCallback: (() => void) | null = null;
 
@@ -24,6 +25,7 @@ export class AudioPlayer {
     }
 
     addChunk(data: Uint8Array) {
+        if (this.isStopped) return;
         this.queue.push(data);
         this.processQueue();
     }
@@ -34,15 +36,18 @@ export class AudioPlayer {
     }
 
     async initSource(): Promise<void> {
+        this.isStopped = false;
         return new Promise((resolve) => {
             this.mediaSource = new MediaSource();
             this.audio.src = URL.createObjectURL(this.mediaSource);
 
             this.mediaSource.addEventListener('sourceopen', () => {
-                if (!this.sourceBuffer && this.mediaSource) {
+                if (this.isStopped || !this.mediaSource) return;
+                
+                if (!this.sourceBuffer) {
                     this.sourceBuffer = this.mediaSource.addSourceBuffer('audio/mpeg');
                     this.sourceBuffer.addEventListener('updateend', () => {
-                        this.processQueue();
+                        if (!this.isStopped) this.processQueue();
                     });
                     this.sourceBuffer.addEventListener('error', (e) => {
                         console.error('[VoxTrack] SourceBuffer Error', e);
@@ -54,30 +59,30 @@ export class AudioPlayer {
     }
 
     private processQueue() {
-        if (!this.sourceBuffer || this.sourceBuffer.updating) {
+        if (this.isStopped || !this.sourceBuffer || this.sourceBuffer.updating || !this.mediaSource || this.mediaSource.readyState !== 'open') {
             return;
         }
 
         if (this.queue.length > 0) {
-            // Peek instead of shift first, to keep it if append fails
             const chunk = this.queue[0];
             if (chunk) {
                 try {
                     this.sourceBuffer.appendBuffer(chunk as any);
-                    // Only shift if successful
                     this.queue.shift();
                 } catch (e: any) {
                     if (e.name === 'QuotaExceededError') {
-                        console.warn('[VoxTrack] Buffer full, cleaning up...');
+                        // Log only once per minute to reduce noise
                         this.cleanupBuffer();
+                    } else if (e.name === 'InvalidStateError') {
+                        // SourceBuffer was detached, ignore this task
+                        console.debug('[VoxTrack] Append failed due to InvalidState');
                     } else {
                         console.error('[VoxTrack] Append failed', e);
-                        // If it's another error, we might want to discard this chunk to avoid infinite loop
                         this.queue.shift();
                     }
                 }
             }
-        } else if (this.isInputFinished && this.mediaSource && this.mediaSource.readyState === 'open') {
+        } else if (this.isInputFinished && this.mediaSource.readyState === 'open') {
             try {
                 this.mediaSource.endOfStream();
             } catch (e) {
@@ -87,40 +92,40 @@ export class AudioPlayer {
     }
 
     private cleanupBuffer() {
-        if (!this.sourceBuffer || this.sourceBuffer.updating) return;
+        if (this.isStopped || !this.sourceBuffer || this.sourceBuffer.updating) return;
 
         const currentTime = this.audio.currentTime;
         const buffered = this.sourceBuffer.buffered;
         
-        // Keep last 10 seconds behind current time
-        const removeEnd = currentTime - 10;
+        // Strategy: Keep 10 seconds behind current time if possible, 
+        // but if we are really stuck, allow cleaning up to 2 seconds behind.
+        let removeEnd = currentTime - 10;
+        if (buffered.length > 0 && removeEnd < buffered.start(0)) {
+            removeEnd = currentTime - 2;
+        }
 
         if (buffered.length > 0 && removeEnd > buffered.start(0)) {
             try {
-                // Remove from start of buffer up to safe point
-                // Note: remove() triggers 'updateend', which will call processQueue again
                 this.sourceBuffer.remove(buffered.start(0), removeEnd);
             } catch (e) {
                 console.error('[VoxTrack] Buffer cleanup failed', e);
             }
         } else {
-            // If we can't remove anything but quota is full, we are stuck.
-            // This happens if the user pauses and a massive amount of data comes in for the FUTURE.
-            // In this case, we might need to wait for playback to advance.
-            console.warn('[VoxTrack] Cannot clean buffer yet (current time too close to start). Waiting...');
-            // Try again in 1 second
-            setTimeout(() => this.processQueue(), 1000);
+            // Memory threshold warning: If queue grows too large (> 100MB roughly)
+            const estimatedQueueSize = this.queue.length * 32000; // Average chunk size
+            if (estimatedQueueSize > 100 * 1024 * 1024) {
+                console.warn('[VoxTrack] Audio RAM queue is getting large. Playback might be too slow.');
+            }
         }
     }
 
     async play(): Promise<void> {
-        if (this.isPlaying) return;
+        if (this.isPlaying || this.isStopped) return;
 
         try {
             await this.audio.play();
             this.isPlaying = true;
         } catch (e) {
-            // Auto-play might be blocked until user interaction
             console.warn('[VoxTrack] Playback pending user interaction', e);
         }
     }
@@ -135,9 +140,12 @@ export class AudioPlayer {
     }
 
     stop(): void {
+        this.isStopped = true;
         this.audio.pause();
         this.audio.removeAttribute('src');
-        this.audio.load(); // Force release of MediaSource
+        try {
+            this.audio.load(); // Release MediaSource
+        } catch (e) {}
         this.audio.currentTime = 0;
         this.isPlaying = false;
         this.queue = [];
@@ -154,4 +162,3 @@ export class AudioPlayer {
         this.mediaSource = null;
         this.isInputFinished = false;
     }
-}
