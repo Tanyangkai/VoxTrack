@@ -2,7 +2,7 @@
 	"id": "voxtrack",
 	"name": "VoxTrack",
 	"minAppVersion": "0.15.0",
-	"description": "High-precision Text-to-Speech (TTS) plugin for Obsidian tracking reading progress word-by-word with natural voices.",
+	"description": "High-precision TTS with word-by-word tracking. Optimized for Chinese and English with natural Edge TTS voices.",
 	"author": "yangkaitan",
 	"authorUrl": "",
 	"fundingUrl": "",
