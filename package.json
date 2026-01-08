@@ -1,6 +1,6 @@
 {
 	"name": "voxtrack",
-	"version": "1.0.2",
+	"version": "1.0.3",
 	"description": "High-precision Text-to-Speech (TTS) plugin for Obsidian tracking reading progress word-by-word with natural voices.",
 	"author": "yangkaitan",
 	"main": "main.js",
