@@ -181,6 +181,10 @@ export default class VoxTrackPlugin extends Plugin {
 							const metadata = parseMetadata(jsonObj);
 							if (metadata.length > 0) {
 								const currentChunkText = this.textChunks[this.currentChunkIndex] || '';
+                                // DEBUG: Log chunk text once
+                                if (this.chunkScanOffset === 0 && this.currentChunkIndex === 0 && metadata[0].offset < 5000000) {
+                                    console.log('[VoxTrack] Current Chunk Text:', JSON.stringify(currentChunkText));
+                                }
 
 								if (this.audioTimeOffset > 0) {
 									for (const m of metadata) {
@@ -191,11 +195,20 @@ export default class VoxTrackPlugin extends Plugin {
 										if (currentChunkText) {
 											const found = currentChunkText.indexOf(m.text, this.chunkScanOffset);
 											if (found !== -1) {
-												m.textOffset = found;
+                                                // console.log(`[VoxTrack] Correction: "${m.text}" found at ${found} (was ${m.textOffset}, scan ${this.chunkScanOffset})`);
+												
+												// Try to expand selection to full word if it looks like a partial match
+												const expanded = this.expandWordSelection(currentChunkText, found, m.wordLength);
+												m.textOffset = expanded.start;
+												m.wordLength = expanded.length;
+												m.text = currentChunkText.substring(expanded.start, expanded.start + expanded.length);
+
 												// Advance scan offset, ensuring we don't skip too much if words overlap (unlikely)
 												// Use a safe increment.
 												this.chunkScanOffset = found + 1; 
-											}
+											} else {
+                                                console.warn(`[VoxTrack] Correction Failed: "${m.text}" not found after ${this.chunkScanOffset}`);
+                                            }
 										}
 									}
 								} else {
@@ -206,9 +219,17 @@ export default class VoxTrackPlugin extends Plugin {
 										if (currentChunkText) {
 											const found = currentChunkText.indexOf(m.text, this.chunkScanOffset);
 											if (found !== -1) {
-												m.textOffset = found;
+                                                // console.log(`[VoxTrack] Correction: "${m.text}" found at ${found} (was ${m.textOffset}, scan ${this.chunkScanOffset})`);
+												
+												const expanded = this.expandWordSelection(currentChunkText, found, m.wordLength);
+												m.textOffset = expanded.start;
+												m.wordLength = expanded.length;
+												m.text = currentChunkText.substring(expanded.start, expanded.start + expanded.length);
+
 												this.chunkScanOffset = found + 1;
-											}
+											} else {
+                                                console.warn(`[VoxTrack] Correction Failed: "${m.text}" not found after ${this.chunkScanOffset}`);
+                                            }
 										}
 									}
 								}
@@ -432,6 +453,30 @@ export default class VoxTrackPlugin extends Plugin {
 			this.syncInterval = requestAnimationFrame(updateLoop);
 		};
 		this.syncInterval = requestAnimationFrame(updateLoop);
+	}
+
+	private expandWordSelection(text: string, start: number, length: number): { start: number, length: number } {
+		// Only expand if the matched text is ASCII (likely English fragment)
+		// If it's Chinese, usually TTS gives correct char/word boundaries.
+		const fragment = text.substring(start, start + length);
+		if (!/^[\w]+$/.test(fragment)) {
+			return { start, length };
+		}
+
+		let newStart = start;
+		let newEnd = start + length;
+
+		// Expand Left (English/Number only)
+		while (newStart > 0 && /[\w]/.test(text[newStart - 1])) {
+			newStart--;
+		}
+
+		// Expand Right (English/Number only)
+		while (newEnd < text.length && /[\w]/.test(text[newEnd])) {
+			newEnd++;
+		}
+
+		return { start: newStart, length: newEnd - newStart };
 	}
 
 	private async processNextChunk(statusBar: HTMLElement) {
