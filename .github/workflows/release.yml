@@ -26,6 +26,9 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
+          name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
           files: |
             main.js
             manifest.json
