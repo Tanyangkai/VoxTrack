@@ -36,7 +36,7 @@ export class AudioPlayer {
         this.processQueue();
     }
 
-    async initSource(): Promise<void> {
+    initSource(): Promise<void> {
         this.isStopped = false;
         return new Promise((resolve) => {
             this.mediaSource = new MediaSource();
@@ -45,15 +45,15 @@ export class AudioPlayer {
 
             this.mediaSource.addEventListener('sourceopen', () => {
                 if (this.isStopped || !this.mediaSource) return;
-                
+
                 if (!this.sourceBuffer) {
                     try {
                         this.sourceBuffer = this.mediaSource.addSourceBuffer('audio/mpeg');
                         this.sourceBuffer.addEventListener('updateend', () => {
                             if (!this.isStopped) this.processQueue();
                         });
-                        this.sourceBuffer.addEventListener('error', (e) => {
-                            console.error('[VoxTrack] SourceBuffer Error', e);
+                        this.sourceBuffer.addEventListener('error', (_e) => {
+                            console.error('[VoxTrack] SourceBuffer Error', _e);
                         });
                     } catch (e) {
                         console.error('[VoxTrack] Failed to add SourceBuffer', e);
@@ -73,12 +73,13 @@ export class AudioPlayer {
             const chunk = this.queue[0];
             if (chunk) {
                 try {
-                    this.sourceBuffer.appendBuffer(chunk as any);
+                    // Cast to unknown then BufferSource to satisfy TS strictness regarding SharedArrayBuffer
+                    this.sourceBuffer.appendBuffer(chunk as unknown as BufferSource);
                     this.queue.shift();
-                } catch (e: any) {
-                    if (e.name === 'QuotaExceededError') {
+                } catch (e) {
+                    if (e instanceof Error && e.name === 'QuotaExceededError') {
                         this.cleanupBuffer();
-                    } else if (e.name === 'InvalidStateError') {
+                    } else if (e instanceof Error && e.name === 'InvalidStateError') {
                         console.debug('[VoxTrack] Append failed due to InvalidState');
                     } else {
                         console.error('[VoxTrack] Append failed', e);
@@ -89,7 +90,7 @@ export class AudioPlayer {
         } else if (this.isInputFinished && this.mediaSource.readyState === 'open') {
             try {
                 this.mediaSource.endOfStream();
-            } catch (e) {
+            } catch {
                 // Silently fail if stream already ended
             }
         }
@@ -100,7 +101,7 @@ export class AudioPlayer {
 
         const currentTime = this.audio.currentTime;
         const buffered = this.sourceBuffer.buffered;
-        
+
         // Strategy: Keep 10 seconds behind current time if possible, 
         // but if we are really stuck, allow cleaning up to 2 seconds behind.
         let removeEnd = currentTime - 10;
@@ -111,8 +112,8 @@ export class AudioPlayer {
         if (buffered.length > 0 && removeEnd > buffered.start(0)) {
             try {
                 this.sourceBuffer.remove(buffered.start(0), removeEnd);
-            } catch (e) {
-                console.error('[VoxTrack] Buffer cleanup failed', e);
+            } catch (_e) {
+                console.error('[VoxTrack] Buffer cleanup failed', _e);
             }
         }
     }
@@ -147,14 +148,14 @@ export class AudioPlayer {
         }
         try {
             this.audio.load(); // Release MediaSource
-        } catch (e) {}
+        } catch { /* ignore */ }
         this.audio.currentTime = 0;
         this.isPlaying = false;
         this.queue = [];
         if (this.mediaSource && this.mediaSource.readyState === 'open') {
             try {
                 this.mediaSource.endOfStream();
-            } catch (e) { }
+            } catch { /* ignore */ }
         }
     }
 

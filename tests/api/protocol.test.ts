@@ -1,4 +1,4 @@
-import { parseMetadata, AudioMetadata } from '../../src/api/protocol';
+import { parseMetadata } from '../../src/api/protocol';
 
 describe('Protocol Layer', () => {
     describe('parseMetadata', () => {
@@ -20,14 +20,6 @@ describe('Protocol Layer', () => {
                     }
                 ]
             };
-
-            const expected: AudioMetadata[] = [{
-                offset: 1230000,
-                duration: 50000,
-                text: "Hello",
-                textOffset: 0, // Note: This might need calculation logic in the parser if not provided
-                wordLength: 5
-            }];
 
             // Assuming parseMetadata returns an array of metadata
             const result = parseMetadata(rawData);

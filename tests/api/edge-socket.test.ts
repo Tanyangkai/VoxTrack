@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
 import { EdgeSocket } from '../../src/api/edge-socket';
 import { WebSocket } from 'ws';
 
@@ -5,6 +6,7 @@ jest.mock('ws');
 
 describe('EdgeSocket', () => {
     let socket: EdgeSocket;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let mockWsInstance: any;
 
     beforeEach(() => {
@@ -37,7 +39,7 @@ describe('EdgeSocket', () => {
         // When new WebSocket() is called, return our mock instance
         (WebSocket as unknown as jest.Mock).mockImplementation(() => mockWsInstance);
         // Also mock the static OPEN constant
-        (WebSocket as any).OPEN = 1;
+        (WebSocket as unknown as { OPEN: number }).OPEN = 1;
 
         socket = new EdgeSocket();
     });

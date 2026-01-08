@@ -1,4 +1,6 @@
 import { Editor, MarkdownView, Plugin, Notice, setIcon } from 'obsidian';
+import { EditorView } from '@codemirror/view';
+import { TransactionSpec } from '@codemirror/state';
 import { v4 as uuidv4 } from 'uuid';
 import { VoxTrackSettings, DEFAULT_SETTINGS, VoxTrackSettingTab } from './settings/setting-tab';
 import { AudioPlayer } from './audio/player';
@@ -6,10 +8,16 @@ import { SyncController } from './sync/controller';
 import { EdgeSocket } from './api/edge-socket';
 import { voxTrackExtensions } from './editor/extensions';
 import { setActiveRange } from './editor/decorations';
-import { parseMetadata } from './api/protocol';
+import { parseMetadata, EdgeResponse, AudioMetadata } from './api/protocol';
 import { TextProcessor } from './text-processor';
 import { getSelectedText, getTextFromCursor, getFullText } from './utils/editor-utils';
 import { t } from './i18n/translations';
+
+interface SafeEditor extends Editor {
+    cm?: EditorView;
+    editor?: { cm?: EditorView };
+    view?: EditorView;
+}
 
 export default class VoxTrackPlugin extends Plugin {
 	settings: VoxTrackSettings;
@@ -61,17 +69,17 @@ export default class VoxTrackPlugin extends Plugin {
 		this.statusBarTextEl = this.statusBarItemEl.createSpan({ cls: 'voxtrack-status-text', text: t("Status: Ready") });
 
 		// Play/Pause Button
-		this.statusBarPlayBtn = this.statusBarItemEl.createSpan({ cls: 'voxtrack-status-btn', attr: { 'aria-label': t("Command: Play/Pause") } });
+		this.statusBarPlayBtn = this.statusBarItemEl.createSpan({ cls: 'voxtrack-status-btn', attr: { 'aria-label': t("Command: Play/pause") } });
 		setIcon(this.statusBarPlayBtn, 'play');
 		this.statusBarPlayBtn.onclick = () => {
 			if (this.isPlaying && this.activeEditor) {
 				// If playing, just toggle
-				void this.togglePlay(this.activeEditor, 'auto', this.statusBarItemEl);
+				void this.togglePlay(this.activeEditor, 'auto', this.statusBarItemEl).catch(console.error);
 			} else {
 				// If not playing, find active view
 				const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
 				if (activeView) {
-					void this.togglePlay(activeView.editor, 'auto', this.statusBarItemEl);
+					void this.togglePlay(activeView.editor, 'auto', this.statusBarItemEl).catch(console.error);
 				} else {
 					new Notice(t("Notice: No editor"));
 				}
@@ -89,10 +97,10 @@ export default class VoxTrackPlugin extends Plugin {
 
 
 		// Ribbon Icon
-		this.addRibbonIcon('play-circle', 'VoxTrack: ' + t("Command: Play/Pause"), (evt: MouseEvent) => {
+		this.addRibbonIcon('play-circle', 'VoxTrack: ' + t("Command: Play/pause"), (evt: MouseEvent) => {
 			const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
 			if (activeView) {
-				void this.togglePlay(activeView.editor, 'auto', this.statusBarItemEl);
+				void this.togglePlay(activeView.editor, 'auto', this.statusBarItemEl).catch(console.error);
 			} else {
 				// Try to stop if no active editor but maybe global playing? 
 				// For now just match command logic which requires editor usually, 
@@ -108,23 +116,35 @@ export default class VoxTrackPlugin extends Plugin {
 		});
 
 		this.addCommand({
-			id: 'voxtrack-play',
-			name: t("Command: Play/Pause"),
+			id: 'play',
+			name: t("Command: Play/pause"),
 			editorCallback: (editor: Editor) => {
-				void this.togglePlay(editor, 'auto', this.statusBarItemEl);
+				void (async () => {
+					try {
+						await this.togglePlay(editor, 'auto', this.statusBarItemEl);
+					} catch (e) {
+						console.error(e);
+					}
+				})();
 			}
 		});
 
 		this.addCommand({
-			id: 'voxtrack-read-from-cursor',
+			id: 'read-from-cursor',
 			name: t("Command: Read from cursor"),
 			editorCallback: (editor: Editor) => {
-				void this.togglePlay(editor, 'cursor', this.statusBarItemEl);
+				void (async () => {
+					try {
+						await this.togglePlay(editor, 'cursor', this.statusBarItemEl);
+					} catch (e) {
+						console.error(e);
+					}
+				})();
 			}
 		});
 
 		this.addCommand({
-			id: 'voxtrack-stop',
+			id: 'stop',
 			name: t("Command: Stop"),
 			editorCallback: () => {
 				this.stopPlayback(this.statusBarItemEl);
@@ -146,7 +166,7 @@ export default class VoxTrackPlugin extends Plugin {
 		);
 	}
 
-	public async onunload(): Promise<void> {
+	public onunload(): void {
 		this.stopPlayback();
 		if (this.player) {
 			this.player.destroy();
@@ -157,7 +177,8 @@ export default class VoxTrackPlugin extends Plugin {
 	}
 
 	private setupDataHandler(statusBar: HTMLElement) {
-		this.socket.onMessage(async (data) => {
+		this.socket.onMessage((data) => {
+			void (async () => {
 			let buffer: Uint8Array;
 			if (typeof data === 'string') {
 				buffer = new TextEncoder().encode(data);
@@ -190,8 +211,10 @@ export default class VoxTrackPlugin extends Plugin {
 					if (jsonStart !== -1) {
 						try {
 							const jsonStr = text.substring(jsonStart + 4);
+							// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 							const jsonObj = JSON.parse(jsonStr);
-							const metadata = parseMetadata(jsonObj);
+							// eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+							const metadata = parseMetadata(jsonObj as EdgeResponse);
 							if (metadata.length > 0) {
 								const targetChunkIndex = this.receivingChunkIndex;
 								const currentChunkText = this.textChunks[targetChunkIndex] || '';
@@ -204,22 +227,22 @@ export default class VoxTrackPlugin extends Plugin {
 
 									// NEW: Aggressively filter out SSML tags and fragments that Edge TTS erroneously returns
 									const rawText = m.text.toLowerCase();
-									if (/[<>]/.test(rawText) || 
+									if (/[<>]/.test(rawText) ||
 										/^(prosody|voice|speak|speak|audio|mstts|phoneme|break|emphasis|say-as|sub|p|s|v|i|ce|od|os|pr|r)$/.test(rawText) ||
 										/^(gt|lt|amp|quot|apos|nbsp|;)$/.test(rawText) ||
 										/^&[a-z]+;?$/.test(rawText) ||
-										/^[\/\\].+$/.test(rawText)) {
+										/^[/\\]/.test(rawText)) {
 										continue;
 									}
 
 									// Auto-correct Text Offset
 									if (currentChunkText) {
 										const searchText = this.unescapeHtml(m.text);
-										
+
 										// Limit search window to prevent jumping to distant matches (noise reduction)
 										const searchWindow = 300;
 										let found = currentChunkText.indexOf(searchText, this.chunkScanOffset);
-										
+
 										if (found !== -1 && found > this.chunkScanOffset + searchWindow) {
 											found = -1;
 										}
@@ -261,6 +284,7 @@ export default class VoxTrackPlugin extends Plugin {
 					void this.processNextChunk(statusBar);
 				}
 			}
+			})();
 		});
 
 		this.socket.onClose(() => {
@@ -275,7 +299,7 @@ export default class VoxTrackPlugin extends Plugin {
 			}
 		});
 
-		let lastActive: any = null;
+		let lastActive: AudioMetadata | null = null;
 		let currentDocOffset = 0;
 
 		const updateLoop = () => {
@@ -299,22 +323,22 @@ export default class VoxTrackPlugin extends Plugin {
 				const mapIndex = active.chunkIndex !== undefined ? active.chunkIndex : this.currentChunkIndex;
 				const currentMap = this.chunkMaps[mapIndex];
 				const chunkBaseOffset = this.chunkOffsets[mapIndex] || 0;
-				
+
 				if (currentMap && active.textOffset !== undefined) {
 					// active.textOffset is index in the processed chunk
 					// active.wordLength is length in processed chunk
-					
+
 					const startIdxInProcessed = active.textOffset;
 					const endIdxInProcessed = active.textOffset + active.wordLength;
 
 					if (startIdxInProcessed < currentMap.length) {
 						const rawStart = currentMap[startIdxInProcessed];
-						
-						let rawEnd = -1;
+
 						if (endIdxInProcessed < currentMap.length) {
+							// Check if end index is valid, though unused for start pos
 							const val = currentMap[endIdxInProcessed];
 							if (val !== undefined) {
-								rawEnd = val;
+								// rawEnd = val; 
 							}
 						}
 
@@ -376,14 +400,14 @@ export default class VoxTrackPlugin extends Plugin {
 
 				if (foundIndex !== -1) {
 					const from = foundIndex;
-					
+
 					// Determine Length
 					// If we used map, we might know the exact length in raw text
 					// But we only got 'from'.
 					// Let's recalculate 'to'.
-					
+
 					let matchLen = wordToFind.length;
-					
+
 					// Use map to find 'to' if possible
 					if (currentMap && active.textOffset !== undefined) {
 						const endIdxInProcessed = active.textOffset + active.wordLength;
@@ -397,7 +421,7 @@ export default class VoxTrackPlugin extends Plugin {
 							}
 						}
 					}
-					
+
 					// Fallback length calculation
 					if (docText.substring(from, from + matchLen) !== wordToFind) {
 						const cleanWord = wordToFind.replace(/[.,;!?。，；！？、]/g, '');
@@ -432,7 +456,7 @@ export default class VoxTrackPlugin extends Plugin {
 							}
 						}
 						highlightTo = nextTerminator === -1 ? docText.length : nextTerminator + 1;
-						
+
 						// Basic trimming logic without large substring creation
 						while (highlightFrom < highlightTo && /\s/.test(docText[highlightFrom] || '')) {
 							highlightFrom++;
@@ -451,21 +475,22 @@ export default class VoxTrackPlugin extends Plugin {
 						this.lastHighlightFrom = highlightFrom;
 						this.lastHighlightTo = highlightTo;
 
-						const view = (this.activeEditor as any).cm || (this.activeEditor as any).editor?.cm || (this.activeEditor as any).view;
+						const safeEditor = this.activeEditor as unknown as SafeEditor;
+						const view = safeEditor.cm || safeEditor.editor?.cm || safeEditor.view;
 						if (view && view.dispatch) {
 							let safeTo = highlightTo;
 							if (safeTo <= highlightFrom) {
 								if (highlightFrom < docText.length) {
 									safeTo = highlightFrom + 1;
 								} else {
-									return; 
+									return;
 								}
 							}
 
 							const shouldScroll = this.settings.autoScrollMode !== 'off';
 							const shouldMoveCursor = this.settings.autoScrollMode === 'cursor';
 
-							const transaction: any = {
+							const transaction: TransactionSpec = {
 								scrollIntoView: shouldScroll
 							};
 
@@ -649,12 +674,12 @@ export default class VoxTrackPlugin extends Plugin {
 		// Note: We fill all with startOffset because TrackedString.map contains the absolute index relative to the *original* text passed to it.
 		// Since we passed the text starting at startOffset, map values are relative to startOffset.
 		// So absPos = startOffset + map[i] is correct for ANY chunk.
-		this.chunkOffsets = new Array(chunks.length).fill(startOffset);
+		this.chunkOffsets = new Array<number>(chunks.length).fill(startOffset);
 
 		try {
 			this.player.reset();
 			await this.player.initSource();
-            this.player.setPlaybackRate(this.settings.playbackSpeed);
+			this.player.setPlaybackRate(this.settings.playbackSpeed);
 
 			this.updateStatus(t("Status: Connecting"), false, false);
 			this.activeEditor = editor;
@@ -674,16 +699,17 @@ export default class VoxTrackPlugin extends Plugin {
 			}
 
 			if (this.textChunks.length > 0 && this.textChunks[0]) {
-                // console.debug('[VoxTrack] Processed Chunk 0 Text:', JSON.stringify(this.textChunks[0]));
+				// console.debug('[VoxTrack] Processed Chunk 0 Text:', JSON.stringify(this.textChunks[0]));
 				await this.sendChunk(this.textChunks[0], statusBar);
 			}
 
 			if (!this.isPlaying) return; // Check again
 			this.updateStatus(t("Status: Playing"), true, false);
 
-		} catch (e: any) {
+		} catch (e) {
+			const message = e instanceof Error ? e.message : 'Unknown error';
 			console.error('[VoxTrack] Playback Error:', e);
-			new Notice(`VoxTrack Error: ${e.message || 'Unknown'}`);
+			new Notice(`VoxTrack Error: ${message}`);
 			this.stopPlayback(statusBar);
 		}
 	}
@@ -695,18 +721,13 @@ export default class VoxTrackPlugin extends Plugin {
 		this.isTransferFinished = false;
 		this.lastHighlightFrom = -1;
 		this.lastHighlightTo = -1;
-		if (this.syncInterval) cancelAnimationFrame(this.syncInterval);
-		this.player.stop();
-		this.socket.close();
-		this.syncController.reset();
-
 		if (this.activeEditor) {
-			const view = (this.activeEditor as any).cm || (this.activeEditor as any).editor?.cm || (this.activeEditor as any).view;
+			const safeEditor = this.activeEditor as unknown as SafeEditor;
+			const view = safeEditor.cm || safeEditor.editor?.cm || safeEditor.view;
 			if (view && view.dispatch) {
 				view.dispatch({ effects: setActiveRange.of(null) });
 			}
 		}
-
 		this.activeEditor = null;
 		this.textChunks = [];
 		this.currentChunkIndex = 0;
@@ -724,7 +745,8 @@ export default class VoxTrackPlugin extends Plugin {
 		this.syncController.reset();
 
 		if (this.activeEditor) {
-			const view = (this.activeEditor as any).cm || (this.activeEditor as any).editor?.cm || (this.activeEditor as any).view;
+			const safeEditor = this.activeEditor as unknown as SafeEditor;
+			const view = safeEditor.cm || safeEditor.editor?.cm || safeEditor.view;
 			if (view && view.dispatch) {
 				view.dispatch({ effects: setActiveRange.of(null) });
 			}
@@ -737,11 +759,14 @@ export default class VoxTrackPlugin extends Plugin {
 	}
 
 	public async loadSettings(): Promise<void> {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+		const data = await this.loadData();
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
 
 		// Migration: autoScroll (boolean) -> autoScrollMode (string)
 		if ('autoScroll' in this.settings) {
-			const legacySettings = this.settings as any;
+			const legacySettings = this.settings as Record<string, unknown>;
 			if (typeof legacySettings.autoScroll === 'boolean') {
 				this.settings.autoScrollMode = legacySettings.autoScroll ? 'cursor' : 'off';
 				delete legacySettings.autoScroll;
@@ -754,11 +779,11 @@ export default class VoxTrackPlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
-    public setPlaybackSpeed(speed: number) {
-        if (this.player) {
-            this.player.setPlaybackRate(speed);
-        }
-    }
+	public setPlaybackSpeed(speed: number) {
+		if (this.player) {
+			this.player.setPlaybackRate(speed);
+		}
+	}
 
 	public applyHighlightColor() {
 		// Remove existing color classes

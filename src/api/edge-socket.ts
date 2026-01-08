@@ -1,4 +1,4 @@
-import { WebSocket } from 'ws';
+import { WebSocket, ClientOptions } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import { EDGE_TTS_URL } from './protocol';
 
@@ -54,7 +54,7 @@ export class EdgeSocket {
                             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0',
                             'Origin': 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold'
                         }
-                    } as any);
+                    } as ClientOptions);
                     this.ws.binaryType = 'arraybuffer';
 
                     this.ws.onopen = () => {
@@ -62,7 +62,7 @@ export class EdgeSocket {
                         resolve();
                     };
 
-                    this.ws.onmessage = (ev: { data: any; type: string; target: WebSocket }) => {
+                    this.ws.onmessage = (ev: { data: unknown; type: string; target: WebSocket }) => {
                         if (this.onMessageCallback) {
                             let data: string | Uint8Array;
                             if (typeof ev.data === 'string') {
@@ -74,18 +74,23 @@ export class EdgeSocket {
                         }
                     };
 
-                    this.ws.onerror = async (err) => {
-                        console.error(`[VoxTrack] WebSocket Error (Retries left: ${retries})`, err);
+                    this.ws.onerror = (err) => {
+                        void (async () => {
+                            console.error(`[VoxTrack] WebSocket Error (Retries left: ${retries})`, err);
 
-                        if (retries > 0) {
-                            this.ws = null;
-                            await new Promise(r => setTimeout(r, delay));
-                            return this.connect(retries - 1, delay * 2)
-                                .then(resolve)
-                                .catch(reject);
-                        } else {
-                            reject(err instanceof Error ? err : new Error("WebSocket connection failed after retries"));
-                        }
+                            if (retries > 0) {
+                                this.ws = null;
+                                await new Promise(r => setTimeout(r, delay));
+                                try {
+                                    await this.connect(retries - 1, delay * 2);
+                                    resolve();
+                                } catch (e) {
+                                    reject(e instanceof Error ? e : new Error(String(e)));
+                                }
+                            } else {
+                                reject(err instanceof Error ? err : new Error("WebSocket connection failed after retries"));
+                            }
+                        })();
                     };
 
                     this.ws.onclose = () => {
@@ -95,7 +100,7 @@ export class EdgeSocket {
                         this.ws = null;
                     };
                 } catch (wsError) {
-                    reject(wsError);
+                    reject(wsError instanceof Error ? wsError : new Error(String(wsError)));
                 }
             });
         } catch (error) {
@@ -123,13 +128,14 @@ export class EdgeSocket {
         this.ws.send(configMsg);
     }
 
-    async sendSSML(ssml: string, requestId: string): Promise<void> {
+    sendSSML(ssml: string, requestId: string): Promise<void> {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) throw new Error("Socket not connected");
 
         const timestamp = this.getTimestamp();
         // Append 'Z' to timestamp as in original code, and send as string
         const msg = `X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${timestamp}Z\r\nPath:ssml\r\n\r\n${ssml}`;
         this.ws.send(msg);
+        return Promise.resolve();
     }
 
     close(): void {

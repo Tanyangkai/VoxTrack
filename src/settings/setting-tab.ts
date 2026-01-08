@@ -1,4 +1,5 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+/* eslint-disable obsidianmd/ui/sentence-case */
+import { App, PluginSettingTab, Setting, DropdownComponent } from "obsidian";
 import VoxTrackPlugin from "../main";
 import { t } from "../i18n/translations";
 
@@ -51,7 +52,8 @@ export class VoxTrackSettingTab extends PluginSettingTab {
         new Setting(containerEl)
             .setName(t("Voice role"))
             .setDesc(t("Voice role desc"))
-            .addDropdown(dropdown => dropdown
+            .addDropdown((dropdown: DropdownComponent) => 
+                dropdown
                 .addOption('zh-CN-XiaoxiaoNeural', 'Xiaoxiao (Female, CN)')
                 .addOption('zh-CN-YunxiNeural', 'Yunxi (Male, CN)')
                 .addOption('zh-CN-YunjianNeural', 'Yunjian (Male, CN)')
@@ -64,7 +66,8 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                 .onChange(async (value) => {
                     this.plugin.settings.voice = value;
                     await this.plugin.saveSettings();
-                }));
+                })
+            );
 
         new Setting(containerEl)
             .setName(t("Playback speed"))
@@ -146,7 +149,7 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                 .addOption('cursor', t("Auto scroll: Cursor"))
                 .setValue(this.plugin.settings.autoScrollMode)
                 .onChange(async (value) => {
-                    this.plugin.settings.autoScrollMode = value as any;
+                    this.plugin.settings.autoScrollMode = value as 'off' | 'center' | 'cursor';
                     await this.plugin.saveSettings();
                 }));
 
@@ -159,7 +162,7 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                 .addOption('none', t("Highlight mode: None"))
                 .setValue(this.plugin.settings.highlightMode)
                 .onChange(async (value) => {
-                    this.plugin.settings.highlightMode = value as any;
+                    this.plugin.settings.highlightMode = value as 'word' | 'sentence' | 'none';
                     await this.plugin.saveSettings();
                 }));
 

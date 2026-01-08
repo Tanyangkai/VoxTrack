@@ -9,19 +9,23 @@ export interface AudioMetadata {
     chunkIndex?: number;
 }
 
-interface EdgeMetadataData {
+interface EdgeMetadataTextObject {
+    Text?: string;
+    text?: string;
+    Word?: string;
     Offset?: number;
     offset?: number;
-    Duration?: number;
-    duration?: number;
-    Text?: string;
-    text?: string | { Text?: string; text?: string; Word?: string; Offset?: number; offset?: number; TextOffset?: number; Length?: number; length?: number; WordLength?: number };
-    Word?: string;
+    TextOffset?: number;
+    textOffset?: number;
     Length?: number;
     length?: number;
     WordLength?: number;
-    TextOffset?: number;
-    [key: string]: any;
+}
+
+interface EdgeMetadataData extends EdgeMetadataTextObject {
+    Duration?: number;
+    duration?: number;
+    [key: string]: unknown;
 }
 
 interface EdgeMetadataItem {
@@ -47,21 +51,22 @@ export function parseMetadata(data: EdgeResponse): AudioMetadata[] {
             // The protocol is inconsistent. Check all known variations.
             const audioOffset = d.Offset ?? d.offset ?? 0;
             const audioDuration = d.Duration ?? d.duration ?? 0;
-            
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            let textObj: any;
+
+            let textObj: EdgeMetadataTextObject;
+            // Check if nested text object exists
             if (d.text && typeof d.text === 'object') {
-                textObj = d.text;
+                textObj = d.text as EdgeMetadataTextObject;
             } else if (d.Text && typeof d.Text === 'object') {
-                textObj = d.Text;
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                textObj = d.Text as any as EdgeMetadataTextObject; 
             } else {
                 textObj = d;
             }
-            
+
             const isFlat = textObj === d;
 
             const word = (textObj.Text ?? textObj.text ?? textObj.Word ?? "") + "";
-            
+
             let textOffset = 0;
             if (isFlat) {
                 // In flat structure, 'Offset' is Audio Offset. Only accept explicit TextOffset.
@@ -72,7 +77,7 @@ export function parseMetadata(data: EdgeResponse): AudioMetadata[] {
             }
 
             const wordLength = textObj.Length ?? textObj.length ?? textObj.WordLength ?? word.length;
-            
+
             if (word) {
                 results.push({
                     offset: Number(audioOffset),

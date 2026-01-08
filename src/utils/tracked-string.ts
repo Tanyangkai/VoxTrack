@@ -7,7 +7,7 @@ export class TrackedString {
         if (map) {
             this.map = map;
         } else {
-            this.map = new Array(text.length);
+            this.map = new Array<number>(text.length);
             for (let i = 0; i < text.length; i++) this.map[i] = i;
         }
     }
@@ -68,7 +68,7 @@ export class TrackedString {
             // Construct new map segment
             // We map all new characters to the start index of the match (or we could distribute them)
             const originIndex = this.map[index]; 
-            const newMapSegment = new Array(replacement.length).fill(originIndex);
+            const newMapSegment = new Array<number>(replacement.length).fill(originIndex);
 
             // Update map
             this.map.splice(index, length, ...newMapSegment);

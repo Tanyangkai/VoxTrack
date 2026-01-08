@@ -16,7 +16,7 @@ const translations = {
         "Notice: Send Error": "VoxTrack: Failed to send text to TTS service",
 
         // Commands
-        "Command: Play/Pause": "Play / pause",
+        "Command: Play/pause": "Play / pause",
         "Command: Read from cursor": "Read from cursor",
         "Command: Stop": "Stop",
 
@@ -75,7 +75,7 @@ const translations = {
         "Notice: Send Error": "VoxTrack: 发送文本至 TTS 服务失败",
 
         // 命令
-        "Command: Play/Pause": "播放 / 暂停",
+        "Command: Play/pause": "播放 / 暂停",
         "Command: Read from cursor": "从光标处朗读",
         "Command: Stop": "停止",
 

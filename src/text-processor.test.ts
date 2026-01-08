@@ -92,7 +92,7 @@ Content`;
 ·有强烈好奇心。`;
 
         const result = processor.process(input, defaultOptions);
-        console.log('Processed Chinese Table:', JSON.stringify(result[0]?.text));
+        // console.log('Processed Chinese Table:', JSON.stringify(result[0]?.text));
 
         // Should contain key content
         expect(result[0]?.text).toContain('行动');
@@ -101,84 +101,76 @@ Content`;
         expect(result[0]?.text).not.toContain('---'); // Should remove separators
     });
 
-        test('removes emojis', () => {
+    test('removes emojis', () => {
 
-            const input = 'Start 🏗️ End';
+        const input = 'Start 🏗️ End';
 
-            const result = processor.process(input, defaultOptions);
+        const result = processor.process(input, defaultOptions);
 
-            expect(result[0]?.text).toBe('Start End');
+        expect(result[0]?.text).toBe('Start End');
 
-        });
+    });
 
-    
 
-        test('repro: LaTeX formula mapping', () => {
 
-            const input = '你持有的 $H_{\\text{自命不凡}}$ 是一个错误算法。';
+    test('repro: LaTeX formula mapping', () => {
 
-            const result = processor.process(input, defaultOptions);
+        const input = '你持有的 $H_{\\text{自命不凡}}$ 是一个错误算法。';
 
-            const chunk = result[0]!;
+        const result = processor.process(input, defaultOptions);
 
-            
+        const chunk = result[0]!;
 
-            console.log('Processed text:', JSON.stringify(chunk.text));
+        // "是一个" should be mapped to the correct position
 
-            console.log('Map:', JSON.stringify(chunk.map));
+        const index = chunk.text.indexOf('是一个');
 
-    
+        expect(index).not.toBe(-1);
 
-            // "是一个" should be mapped to the correct position
 
-            const index = chunk.text.indexOf('是一个');
 
-            expect(index).not.toBe(-1);
+        const originalPos = chunk.map[index];
 
-            
 
-                    const originalPos = chunk.map[index];
 
-            
+        const expectedPos = input.indexOf('是一个');
 
-                    const expectedPos = input.indexOf('是一个');
 
-            
 
-                    expect(originalPos).toBe(expectedPos);
+        expect(originalPos).toBe(expectedPos);
 
-            
 
-            
 
-            
 
-                    // Check the word after the formula
 
-            
 
-                    const textAfter = chunk.text.substring(index, index + 3);
 
-            
+        // Check the word after the formula
 
-                    expect(textAfter).toBe('是一个');
 
-            
 
-                    if (originalPos !== undefined) {
+        const textAfter = chunk.text.substring(index, index + 3);
 
-            
 
-                        expect(input.substring(originalPos, originalPos + 3)).toBe('是一个');
 
-            
+        expect(textAfter).toBe('是一个');
 
-                    }
 
-            
 
-                });
+        if (originalPos !== undefined) {
 
-            
 
-            });
+
+            expect(input.substring(originalPos, originalPos + 3)).toBe('是一个');
+
+
+
+        }
+
+
+
+    });
+
+
+
+});
