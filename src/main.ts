@@ -519,6 +519,9 @@ export default class VoxTrackPlugin extends Plugin {
 
 		this.textChunks = chunks.map(c => c.text);
 		this.chunkMaps = chunks.map(c => c.map);
+		// Note: We fill all with startOffset because TrackedString.map contains the absolute index relative to the *original* text passed to it.
+		// Since we passed the text starting at startOffset, map values are relative to startOffset.
+		// So absPos = startOffset + map[i] is correct for ANY chunk.
 		this.chunkOffsets = new Array(chunks.length).fill(startOffset);
 
 		try {

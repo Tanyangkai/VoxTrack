@@ -48,9 +48,28 @@ export function parseMetadata(data: EdgeResponse): AudioMetadata[] {
             const audioDuration = d.Duration ?? d.duration ?? 0;
             
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const textObj: any = d.text ?? d.Text ?? d; // Fallback to Data itself if flat
+            let textObj: any;
+            if (d.text && typeof d.text === 'object') {
+                textObj = d.text;
+            } else if (d.Text && typeof d.Text === 'object') {
+                textObj = d.Text;
+            } else {
+                textObj = d;
+            }
+            
+            const isFlat = textObj === d;
+
             const word = (textObj.Text ?? textObj.text ?? textObj.Word ?? "") + "";
-            const textOffset = textObj.Offset ?? textObj.offset ?? textObj.TextOffset ?? 0;
+            
+            let textOffset = 0;
+            if (isFlat) {
+                // In flat structure, 'Offset' is Audio Offset. Only accept explicit TextOffset.
+                textOffset = textObj.TextOffset ?? 0;
+            } else {
+                // In nested structure, 'Offset' is likely Text Offset relative to the phrase.
+                textOffset = textObj.Offset ?? textObj.offset ?? textObj.TextOffset ?? 0;
+            }
+
             const wordLength = textObj.Length ?? textObj.length ?? textObj.WordLength ?? word.length;
             
             if (word) {

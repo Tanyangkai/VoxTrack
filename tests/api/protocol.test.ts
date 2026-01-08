@@ -40,6 +40,33 @@ describe('Protocol Layer', () => {
             });
         });
 
+        it('should parse Flat Edge TTS metadata structure correctly', () => {
+            const rawData = {
+                Metadata: [
+                    {
+                        Type: "WordBoundary",
+                        Data: {
+                            Offset: 9999999, // Audio Offset (Should NOT be used as TextOffset)
+                            Duration: 50000,
+                            Text: "Flat",
+                            TextOffset: 42,
+                            WordLength: 4
+                        }
+                    }
+                ]
+            };
+
+            const result = parseMetadata(rawData);
+            expect(result).toHaveLength(1);
+            expect(result[0]).toMatchObject({
+                offset: 9999999,
+                duration: 50000,
+                text: "Flat",
+                textOffset: 42, // MUST be 42, not 9999999
+                wordLength: 4
+            });
+        });
+
         it('should return empty array for irrelevant events', () => {
             const rawData = {
                 Metadata: [
