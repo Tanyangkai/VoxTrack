@@ -40,6 +40,8 @@ export default class VoxTrackPlugin extends Plugin {
 	private statusBarPlayBtn: HTMLElement;
 	private statusBarStopBtn: HTMLElement;
 
+	private receivingChunkIndex: number = 0;
+
 	public async onload(): Promise<void> {
 		await this.loadSettings();
 		this.applyHighlightColor();
@@ -185,43 +187,57 @@ export default class VoxTrackPlugin extends Plugin {
 							const jsonObj = JSON.parse(jsonStr);
 							const metadata = parseMetadata(jsonObj);
 							if (metadata.length > 0) {
-								const currentChunkText = this.textChunks[this.currentChunkIndex] || '';
+								const targetChunkIndex = this.receivingChunkIndex;
+								const currentChunkText = this.textChunks[targetChunkIndex] || '';
 
-								if (this.audioTimeOffset > 0) {
-									for (const m of metadata) {
+								for (const m of metadata) {
+									if (this.audioTimeOffset > 0) {
 										m.offset += this.audioTimeOffset;
-										m.chunkIndex = this.currentChunkIndex;
+									}
+									m.chunkIndex = targetChunkIndex;
 
-										// Auto-correct Text Offset
-										if (currentChunkText) {
-											const searchText = this.unescapeHtml(m.text);
-											const found = currentChunkText.indexOf(searchText, this.chunkScanOffset);
-											if (found !== -1) {
-												// Try to expand selection to full word if it looks like a partial match
-												const expanded = this.expandWordSelection(currentChunkText, found, searchText.length);
-												m.textOffset = expanded.start;
-												m.wordLength = expanded.length;
-												m.text = currentChunkText.substring(expanded.start, expanded.start + expanded.length);
+									// NEW: Aggressively filter out SSML tags and fragments that Edge TTS erroneously returns
+									const rawText = m.text.toLowerCase();
+									if (/[<>]/.test(rawText) || 
+										/^(prosody|voice|speak|speak|audio|mstts|phoneme|break|emphasis|say-as|sub|p|s|v|i|ce|od|os|pr|r)$/.test(rawText) ||
+										/^(gt|lt|amp|quot|apos|nbsp|;)$/.test(rawText) ||
+										/^&[a-z]+;?$/.test(rawText) ||
+										/^[\/\\].+$/.test(rawText)) {
+										continue;
+									}
 
-												// Advance scan offset
-												this.chunkScanOffset = found + 1;
+									// Auto-correct Text Offset
+									if (currentChunkText) {
+										const searchText = this.unescapeHtml(m.text);
+										
+										// Limit search window to prevent jumping to distant matches (noise reduction)
+										const searchWindow = 300;
+										let found = currentChunkText.indexOf(searchText, this.chunkScanOffset);
+										
+										if (found !== -1 && found > this.chunkScanOffset + searchWindow) {
+											found = -1;
+										}
+
+										if (found === -1) {
+											const cleanSearch = searchText.replace(/[.,;!?。，；！？、]/g, '');
+											if (cleanSearch.length > 0) {
+												found = currentChunkText.indexOf(cleanSearch, this.chunkScanOffset);
+												if (found !== -1 && found > this.chunkScanOffset + searchWindow) {
+													found = -1;
+												}
 											}
 										}
-									}
-								} else {
-									for (const m of metadata) {
-										m.chunkIndex = this.currentChunkIndex;
 
-										// Auto-correct Text Offset
-										if (currentChunkText) {
-											const searchText = this.unescapeHtml(m.text);
-											const found = currentChunkText.indexOf(searchText, this.chunkScanOffset);
-											if (found !== -1) {
+										if (found !== -1) {
+											// Ignore suspicious single-letter jumps (likely TTS garbage tokens)
+											const isSingleLetter = searchText.length === 1 && /[a-zA-Z]/.test(searchText);
+											if (isSingleLetter && found > this.chunkScanOffset + 20) {
+												// Skip this token
+											} else {
 												const expanded = this.expandWordSelection(currentChunkText, found, searchText.length);
 												m.textOffset = expanded.start;
 												m.wordLength = expanded.length;
 												m.text = currentChunkText.substring(expanded.start, expanded.start + expanded.length);
-
 												this.chunkScanOffset = found + 1;
 											}
 										}
@@ -235,6 +251,7 @@ export default class VoxTrackPlugin extends Plugin {
 					}
 				} else if (text.includes('Path:turn.end')) {
 					this.audioTimeOffset = this.syncController.getLastEndTime();
+					this.receivingChunkIndex++;
 					void this.processNextChunk(statusBar);
 				}
 			}
@@ -319,13 +336,17 @@ export default class VoxTrackPlugin extends Plugin {
 				// Fallback 1: Direct search
 				if (foundIndex === -1) {
 					foundIndex = docText.indexOf(wordToFind, currentDocOffset);
+					// if (foundIndex !== -1) console.debug(`[VoxTrack] Map failed, fallback 1 found "${wordToFind}" at ${foundIndex}`);
 				}
 
 				// Fallback 2: Case-insensitive search
 				if (foundIndex === -1) {
 					const lowerDoc = docText.toLowerCase();
-					const lowerWord = wordToFind.toLowerCase();
-					foundIndex = lowerDoc.indexOf(lowerWord, currentDocOffset);
+					const lowerWord = lowerDoc.indexOf(wordToFind.toLowerCase(), currentDocOffset);
+					if (lowerWord !== -1) {
+						foundIndex = lowerWord;
+						// console.debug(`[VoxTrack] Map failed, fallback 2 found "${wordToFind}" at ${foundIndex}`);
+					}
 				}
 
 				// Fallback 3: Fuzzy search (strip punctuation from wordToFind)
@@ -334,9 +355,14 @@ export default class VoxTrackPlugin extends Plugin {
 					const cleanWord = wordToFind.replace(/[.,;!?。，；！？、]/g, '');
 					if (cleanWord.length > 0 && cleanWord !== wordToFind) {
 						foundIndex = docText.indexOf(cleanWord, currentDocOffset);
+						// if (foundIndex !== -1) console.debug(`[VoxTrack] Map failed, fallback 3 found "${cleanWord}" at ${foundIndex}`);
 						// Try case-insensitive specific clean word
 						if (foundIndex === -1) {
-							foundIndex = docText.toLowerCase().indexOf(cleanWord.toLowerCase(), currentDocOffset);
+							const fuzzyIdx = docText.toLowerCase().indexOf(cleanWord.toLowerCase(), currentDocOffset);
+							if (fuzzyIdx !== -1) {
+								foundIndex = fuzzyIdx;
+								// console.debug(`[VoxTrack] Map failed, fallback 3 (fuzzy) found "${cleanWord}" at ${foundIndex}`);
+							}
 						}
 					}
 				}
@@ -469,7 +495,7 @@ export default class VoxTrackPlugin extends Plugin {
 						}
 					}
 				} else {
-					console.warn(`[VoxTrack] Sync: Could not find "${wordToFind}" after ${currentDocOffset} (base: ${chunkBaseOffset})`);
+					// console.warn(`[VoxTrack] Sync: Could not find "${wordToFind}" after ${currentDocOffset} (base: ${chunkBaseOffset})`);
 				}
 			}
 
@@ -549,6 +575,8 @@ export default class VoxTrackPlugin extends Plugin {
 
 		const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='${lang}'><voice name='${voice}'><prosody pitch='${pitch}' rate='${rate}' volume='${volume}'>${escapedText}</prosody></voice></speak>`;
 
+		// console.debug('[VoxTrack] Sending SSML:', ssml);
+
 		try {
 			await this.socket.sendSSML(ssml, uuidv4().replace(/-/g, ''));
 		} catch (error) {
@@ -608,6 +636,7 @@ export default class VoxTrackPlugin extends Plugin {
 		this.textChunks = [];
 		this.chunkOffsets = [];
 		this.currentChunkIndex = 0;
+		this.receivingChunkIndex = 0;
 		this.activeMode = mode;
 
 		const voice = this.settings.voice || 'zh-CN-XiaoxiaoNeural';
@@ -657,6 +686,7 @@ export default class VoxTrackPlugin extends Plugin {
 			}
 
 			if (this.textChunks.length > 0 && this.textChunks[0]) {
+                // console.debug('[VoxTrack] Processed Chunk 0 Text:', JSON.stringify(this.textChunks[0]));
 				await this.sendChunk(this.textChunks[0], statusBar);
 			}
 

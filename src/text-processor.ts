@@ -30,8 +30,8 @@ export class TextProcessor {
             ts.remove(/`[^`\n]+`/); 
         }
         if (options.filterMath) {
-            ts.remove(/\$\$[\s\S]*?\$\$/);
-            ts.remove(/\$[^$\n]+\$/);
+            ts.replace(/\$\$[\s\S]*?\$\$/g, ' ');
+            ts.replace(/\$((?:\\\$|[^$\n])+?)\$/g, ' ');
         }
         if (options.filterObsidian) {
             ts.remove(/>\s*\[!.*\][^\n]*\n/); // Callout headers
@@ -46,8 +46,6 @@ export class TextProcessor {
             // [text](url) -> text (Group 1)
             ts.keepGroup1(/\[([^\]]+)\]\([^)]+\)/);
             // [[link|text]] -> text (Group 1 is what we want)
-            // Original: /\[\[([^\]|]+)\|([^\]]+)\]\]/ -> $2
-            // We need to modify regex to capture ONLY the part we want in group 1.
             ts.keepGroup1(/\[\[[^\]|]+\|([^\]]+)\]\]/);
             // [[link]] -> link (Group 1)
             ts.keepGroup1(/\[\[([^\]]+)\]\]/);
@@ -65,26 +63,25 @@ export class TextProcessor {
         // Remove Emoji
         ts.remove(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F018}-\u{1F0F5}\u{1F200}-\u{1F270}\u{FE0F}]/u);
 
-        // 4. Common Filter (Pipes) - 1-to-1 Replacement
+        // 4. Structure Cleanup
+        // Specifically remove table separator rows before replacing pipes
+        ts.replace(/^\s*[|:-\s]+\s*$/gm, ''); 
+        
+        // 5. Common Filter (Pipes) - 1-to-1 Replacement
         // Use comma to encourage continuous reading rather than newlines
-        // Comma forces a prosodic break which usually ensures WordBoundary events are generated.
         ts.replace(/\|/g, ', '); 
-
-        // 5. Structure Cleanup
-        // Empty list items/dividers (now including commas from pipe replacement)
-        ts.remove(/^\s*[-:,\s]+\s*$/m); 
         
         // Formatting chars: * _ ` ~ -> space
-        ts.replace(/[*_`~]/, ' ');
+        ts.replace(/[*_`~]/g, ' ');
         
-        // Headers/Quotes
-        ts.remove(/^[#>-]+\s*/m);
+        // Headers/Quotes/List markers
+        ts.replace(/^\s*[#>-]+\s*/gm, ' ');
 
         // Collapse multiple spaces to single space (helps with segmentation)
         ts.replace(/ +/g, ' ');
 
         // 7. Final Cleanup
-        ts.replace(/\n{3,}/, '\n\n');
+        ts.replace(/\n{3,}/g, '\n\n');
 
         // Trim
         ts.trim();
@@ -116,11 +113,28 @@ export class TextProcessor {
                 if (found > cut - checkWindow) {
                     cut = found + 2;
                 } else {
-                    found = textStr.lastIndexOf(', ', cut);
-                    if (found > cut - checkWindow) cut = found + 2;
-                    else {
-                        found = textStr.lastIndexOf(' ', cut);
-                        if (found > cut - checkWindow) cut = found + 1;
+                    // Chinese sentence boundaries
+                    found = -1;
+                    const punts = ['。', '！', '？', '；', '：'];
+                    for (const p of punts) {
+                        const idx = textStr.lastIndexOf(p, cut);
+                        if (idx > found) found = idx;
+                    }
+
+                    if (found > cut - checkWindow) {
+                        cut = found + 1;
+                    } else {
+                        found = textStr.lastIndexOf(', ', cut);
+                        if (found > cut - checkWindow) cut = found + 2;
+                        else {
+                            // Chinese comma
+                            found = textStr.lastIndexOf('，', cut);
+                            if (found > cut - checkWindow) cut = found + 1;
+                            else {
+                                found = textStr.lastIndexOf(' ', cut);
+                                if (found > cut - checkWindow) cut = found + 1;
+                            }
+                        }
                     }
                 }
             }

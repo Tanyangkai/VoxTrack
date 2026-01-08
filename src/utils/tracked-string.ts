@@ -87,29 +87,26 @@ export class TrackedString {
         let match;
         while ((match = regex.exec(this.text)) !== null) {
             if (match[1] !== undefined) {
-                // Find index of group1 within the full match string to calculate absolute offset
-                // match.index is start of full match
-                // We need start of group 1.
-                // Limitations of JS RegExp: doesn't give group indices directly.
-                // Workaround: Look for group1 text inside match[0]. 
-                // CAUTION: Group 1 text might appear multiple times in match[0].
-                // Using `indices` flag (d) would be better but requires ES2022.
-                // For our specific use cases (links), it's usually `[text](url)` or `[[text|alias]]`.
-                
-                // Strategy: Re-match sub-parts or assume structure.
-                // For `[text](url)`, match[0] is `[text](url)`, match[1] is `text`.
-                // The `text` starts at index 1 (after `[`).
-                
-                // For `[[link|text]]`, match[0] is `[[link|text]]`, match[1] is `text`.
-                // It starts after `[[link|`.
-                
-                // Let's rely on finding the group text inside the match text.
-                // To avoid ambiguity, we scan from known delimiters if possible, or just first occurrence.
-                // Given the patterns we use, first occurrence is usually safe OR we can refine patterns.
-                
                 const fullMatch = match[0];
                 const groupText = match[1];
-                const groupRelIndex = fullMatch.indexOf(groupText);
+                
+                let groupRelIndex = -1;
+                if (fullMatch.startsWith('[[')) {
+                    // [[link|alias]] or [[link]]
+                    if (fullMatch.includes('|')) {
+                        groupRelIndex = fullMatch.lastIndexOf(groupText, fullMatch.length - 3);
+                    } else {
+                        groupRelIndex = 2; // After '[['
+                    }
+                } else if (fullMatch.startsWith('[')) {
+                    // [text](url)
+                    groupRelIndex = 1; // After '['
+                }
+                
+                // Fallback if patterns don't match assumptions
+                if (groupRelIndex === -1 || fullMatch.substring(groupRelIndex, groupRelIndex + groupText.length) !== groupText) {
+                    groupRelIndex = fullMatch.indexOf(groupText);
+                }
                 
                 if (groupRelIndex !== -1) {
                     matches.push({ 
@@ -148,10 +145,17 @@ export class TrackedString {
     }
 
     trim(): void {
-        const start = this.text.search(/\S|$|/);
-        const end = this.text.search(/\s*$/);
+        const startMatch = this.text.match(/\S/);
+        const start = startMatch ? startMatch.index! : 0;
+        const endMatch = this.text.match(/\s*$/);
+        const end = endMatch ? endMatch.index! : this.text.length;
         
         if (start === 0 && end === this.text.length) return; 
+        if (start >= end) {
+            this.text = "";
+            this.map = [];
+            return;
+        }
         
         this.text = this.text.substring(start, end);
         this.map = this.map.slice(start, end);

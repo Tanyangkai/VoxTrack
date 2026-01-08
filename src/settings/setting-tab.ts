@@ -124,7 +124,7 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
-            .setName(t("Filter Obsidian syntax"))
+            .setName(t("Filter Obsidian"))
             .setDesc(t("Filter Obsidian desc"))
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.filterObsidian)
