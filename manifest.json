@@ -6,5 +6,6 @@
 	"author": "yangkaitan",
 	"authorUrl": "",
 	"fundingUrl": "",
-	"isDesktopOnly": false
+	"isDesktopOnly": false,
+	"version": "1.0.4"
 }
