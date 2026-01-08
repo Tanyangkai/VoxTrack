@@ -14,6 +14,7 @@ export interface VoxTrackSettings {
     filterMath: boolean;
     filterFrontmatter: boolean;
     filterObsidian: boolean;
+    playbackSpeed: number;
 }
 
 export const DEFAULT_SETTINGS: VoxTrackSettings = {
@@ -21,6 +22,7 @@ export const DEFAULT_SETTINGS: VoxTrackSettings = {
     rate: "+0%",
     pitch: "+0Hz",
     volume: "+0%",
+    playbackSpeed: 1.0,
     autoScrollMode: 'cursor', // Default to cursor for best Live Preview support
     highlightMode: 'word',
     clickToPlay: false,
@@ -77,6 +79,19 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.pitch)
                 .onChange(async (value) => {
                     this.plugin.settings.pitch = value;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Playback speed')
+            .setDesc('Audio playback multiplier (0.5x - 3.0x). Does not require re-generation.')
+            .addSlider(slider => slider
+                .setLimits(0.5, 3.0, 0.1)
+                .setValue(this.plugin.settings.playbackSpeed)
+                .setDynamicTooltip()
+                .onChange(async (value) => {
+                    this.plugin.settings.playbackSpeed = value;
+                    this.plugin.setPlaybackSpeed(value); // Live update
                     await this.plugin.saveSettings();
                 }));
 

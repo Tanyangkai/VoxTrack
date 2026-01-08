@@ -595,6 +595,7 @@ export default class VoxTrackPlugin extends Plugin {
 		try {
 			this.player.reset();
 			await this.player.initSource();
+            this.player.setPlaybackRate(this.settings.playbackSpeed);
 
 			this.updateStatus('VoxTrack: Connecting...', false, false);
 			this.activeEditor = editor;
@@ -686,6 +687,12 @@ export default class VoxTrackPlugin extends Plugin {
 	public async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
 	}
+
+    public setPlaybackSpeed(speed: number) {
+        if (this.player) {
+            this.player.setPlaybackRate(speed);
+        }
+    }
 
 	private updateStatus(text: string, isPlaying: boolean, isPaused: boolean) {
 		if (this.statusBarTextEl) {

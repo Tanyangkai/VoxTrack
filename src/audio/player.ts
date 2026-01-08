@@ -19,6 +19,10 @@ export class AudioPlayer {
         this.onCompleteCallback = callback;
     }
 
+    setPlaybackRate(rate: number): void {
+        this.audio.playbackRate = rate;
+    }
+
     addChunk(data: Uint8Array) {
         this.queue.push(data);
         this.processQueue();
