@@ -66,7 +66,8 @@ export class TextProcessor {
 
         // 4. Common Filter (Pipes) - 1-to-1 Replacement
         // Use comma to encourage continuous reading rather than newlines
-        ts.replace(/\|/g, ' '); 
+        // Comma forces a prosodic break which usually ensures WordBoundary events are generated.
+        ts.replace(/\|/g, ', '); 
 
         // 5. Structure Cleanup
         // Empty list items/dividers
