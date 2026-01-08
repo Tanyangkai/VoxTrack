@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { parseMetadata } from '../../src/api/protocol';
 
 describe('Protocol Layer', () => {

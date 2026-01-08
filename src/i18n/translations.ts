@@ -19,6 +19,7 @@ const translations = {
         "Command: Play/pause": "Play / pause",
         "Command: Read from cursor": "Read from cursor",
         "Command: Stop": "Stop",
+        "Tooltip: Locate": "Scroll to reading position",
 
         // Settings - Voice Options
         "Voice options": "Voice options",
@@ -42,6 +43,8 @@ const translations = {
 
         // Settings - Interaction
         "Interaction": "Interaction",
+        "Show floating button": "Show floating button",
+        "Show floating locator button during playback": "Show floating locator button during playback",
         "Auto scroll mode": "Auto scroll mode",
         "Auto scroll mode desc": "How the editor should follow the speech",
         "Auto scroll: Off": "Off",
@@ -78,6 +81,7 @@ const translations = {
         "Command: Play/pause": "播放 / 暂停",
         "Command: Read from cursor": "从光标处朗读",
         "Command: Stop": "停止",
+        "Tooltip: Locate": "定位到朗读位置",
 
         // 设置 - 语音选项
         "Voice options": "语音设置",
@@ -101,6 +105,8 @@ const translations = {
 
         // 设置 - 交互
         "Interaction": "交互与外观",
+        "Show floating button": "显示悬浮定位按钮",
+        "Show floating locator button during playback": "播放时在右下角显示定位按钮",
         "Auto scroll mode": "自动滚动模式",
         "Auto scroll mode desc": "编辑器如何跟随朗读进度",
         "Auto scroll: Off": "关闭",

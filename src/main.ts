@@ -47,6 +47,7 @@ export default class VoxTrackPlugin extends Plugin {
 	private statusBarTextEl: HTMLElement;
 	private statusBarPlayBtn: HTMLElement;
 	private statusBarStopBtn: HTMLElement;
+	private floatingBtnEl: HTMLElement;
 
 	private receivingChunkIndex: number = 0;
 
@@ -94,6 +95,12 @@ export default class VoxTrackPlugin extends Plugin {
 				this.stopPlayback(this.statusBarItemEl);
 			}
 		};
+
+		// Floating Locator Button
+		this.floatingBtnEl = document.body.createEl('div', { cls: 'voxtrack-floating-btn is-hidden' });
+		setIcon(this.floatingBtnEl, 'locate');
+		this.floatingBtnEl.setAttribute('aria-label', t("Tooltip: Locate"));
+		this.floatingBtnEl.onclick = () => this.scrollToActive();
 
 
 		// Ribbon Icon
@@ -174,6 +181,9 @@ export default class VoxTrackPlugin extends Plugin {
 		if (this.statusBarItemEl) {
 			this.statusBarItemEl.remove();
 		}
+		if (this.floatingBtnEl) {
+			this.floatingBtnEl.remove();
+		}
 	}
 
 	private setupDataHandler(statusBar: HTMLElement) {
@@ -213,7 +223,6 @@ export default class VoxTrackPlugin extends Plugin {
 							const jsonStr = text.substring(jsonStart + 4);
 							// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 							const jsonObj = JSON.parse(jsonStr);
-							// eslint-disable-next-line @typescript-eslint/no-unsafe-argument
 							const metadata = parseMetadata(jsonObj as EdgeResponse);
 							if (metadata.length > 0) {
 								const targetChunkIndex = this.receivingChunkIndex;
@@ -706,6 +715,10 @@ export default class VoxTrackPlugin extends Plugin {
 			if (!this.isPlaying) return; // Check again
 			this.updateStatus(t("Status: Playing"), true, false);
 
+			if (this.settings.showFloatingButton && this.floatingBtnEl) {
+				this.floatingBtnEl.removeClass('is-hidden');
+			}
+
 		} catch (e) {
 			const message = e instanceof Error ? e.message : 'Unknown error';
 			console.error('[VoxTrack] Playback Error:', e);
@@ -732,6 +745,7 @@ export default class VoxTrackPlugin extends Plugin {
 		this.textChunks = [];
 		this.currentChunkIndex = 0;
 		this.updateStatus(t("Status: Ready"), false, false);
+		if (this.floatingBtnEl) this.floatingBtnEl.addClass('is-hidden');
 	}
 
 	private handlePlaybackFinished(statusBar?: HTMLElement) {
@@ -756,6 +770,7 @@ export default class VoxTrackPlugin extends Plugin {
 		this.textChunks = [];
 		this.currentChunkIndex = 0;
 		this.updateStatus(t("Status: Ready"), false, false);
+		if (this.floatingBtnEl) this.floatingBtnEl.addClass('is-hidden');
 	}
 
 	public async loadSettings(): Promise<void> {
@@ -777,6 +792,13 @@ export default class VoxTrackPlugin extends Plugin {
 
 	public async saveSettings(): Promise<void> {
 		await this.saveData(this.settings);
+		if (this.floatingBtnEl) {
+			if (this.isPlaying && this.settings.showFloatingButton) {
+				this.floatingBtnEl.removeClass('is-hidden');
+			} else {
+				this.floatingBtnEl.addClass('is-hidden');
+			}
+		}
 	}
 
 	public setPlaybackSpeed(speed: number) {
@@ -813,6 +835,18 @@ export default class VoxTrackPlugin extends Plugin {
 			const showPause = isPlaying && !isPaused;
 			setIcon(this.statusBarPlayBtn, showPause ? 'pause' : 'play');
 			this.statusBarPlayBtn.setAttribute('aria-label', showPause ? 'Pause' : 'Play');
+		}
+	}
+
+	private scrollToActive() {
+		if (this.activeEditor && this.lastHighlightFrom !== -1) {
+			const safeEditor = this.activeEditor as unknown as SafeEditor;
+			const view = safeEditor.cm || safeEditor.editor?.cm || safeEditor.view;
+			if (view) {
+				view.dispatch({
+					effects: [EditorView.scrollIntoView(this.lastHighlightFrom, { y: 'center' })]
+				});
+			}
 		}
 	}
 }
