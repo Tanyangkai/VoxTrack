@@ -22,7 +22,8 @@ describe('Protocol Layer', () => {
             };
 
             // Assuming parseMetadata returns an array of metadata
-            const result = parseMetadata(rawData);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const result = parseMetadata(rawData as any);
             expect(result).toHaveLength(1);
             expect(result[0]).toMatchObject({
                 offset: 1230000,
@@ -48,7 +49,8 @@ describe('Protocol Layer', () => {
                 ]
             };
 
-            const result = parseMetadata(rawData);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const result = parseMetadata(rawData as any);
             expect(result).toHaveLength(1);
             expect(result[0]).toMatchObject({
                 offset: 9999999,
@@ -81,7 +83,8 @@ describe('Protocol Layer', () => {
             // isFlat = true.
             // textOffset = d.TextOffset ?? d.textOffset
             
-            const result = parseMetadata(rawData);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const result = parseMetadata(rawData as any);
             expect(result).toHaveLength(1);
             if (result[0]) {
                 expect(result[0].textOffset).toBe(15);
@@ -97,7 +100,8 @@ describe('Protocol Layer', () => {
                     }
                 ]
             };
-            const result = parseMetadata(rawData);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const result = parseMetadata(rawData as any);
             expect(result).toEqual([]);
         });
     });

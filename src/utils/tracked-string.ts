@@ -67,7 +67,7 @@ export class TrackedString {
 
             // Construct new map segment
             // We map all new characters to the start index of the match (or we could distribute them)
-            const originIndex = this.map[index]; 
+            const originIndex = this.map[index] ?? -1; 
             const newMapSegment = new Array<number>(replacement.length).fill(originIndex);
 
             // Update map

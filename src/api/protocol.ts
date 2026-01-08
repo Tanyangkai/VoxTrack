@@ -22,18 +22,18 @@ interface EdgeMetadataTextObject {
     WordLength?: number;
 }
 
-interface EdgeMetadataData extends EdgeMetadataTextObject {
+export interface EdgeMetadataData extends EdgeMetadataTextObject {
     Duration?: number;
     duration?: number;
     [key: string]: unknown;
 }
 
-interface EdgeMetadataItem {
+export interface EdgeMetadataItem {
     Type: string;
     Data: EdgeMetadataData;
 }
 
-interface EdgeResponse {
+export interface EdgeResponse {
     Metadata?: EdgeMetadataItem[];
 }
 
