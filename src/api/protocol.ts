@@ -43,6 +43,8 @@ export function parseMetadata(data: EdgeResponse): AudioMetadata[] {
     for (const item of data.Metadata) {
         if (item.Type === "WordBoundary" && item.Data) {
             const d = item.Data;
+            // console.log('[VoxTrack] Raw Metadata:', JSON.stringify(d)); // DEBUG
+
             // The protocol is inconsistent. Check all known variations.
             const audioOffset = d.Offset ?? d.offset ?? 0;
             const audioDuration = d.Duration ?? d.duration ?? 0;
@@ -64,7 +66,7 @@ export function parseMetadata(data: EdgeResponse): AudioMetadata[] {
             let textOffset = 0;
             if (isFlat) {
                 // In flat structure, 'Offset' is Audio Offset. Only accept explicit TextOffset.
-                textOffset = textObj.TextOffset ?? 0;
+                textOffset = textObj.TextOffset ?? textObj.textOffset ?? 0;
             } else {
                 // In nested structure, 'Offset' is likely Text Offset relative to the phrase.
                 textOffset = textObj.Offset ?? textObj.offset ?? textObj.TextOffset ?? 0;

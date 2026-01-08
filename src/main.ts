@@ -224,16 +224,15 @@ export default class VoxTrackPlugin extends Plugin {
 			const active = this.syncController.findActiveMetadata(time);
 
 			if (active && active !== lastActive && this.activeEditor) {
-                // DEBUG: Temporary log to diagnose sync offset
-                // console.log('[VoxTrack] Sync Debug:', {
-                //     time: time.toFixed(3),
-                //     chunkIdx: active.chunkIndex,
-                //     currentChunkIdx: this.currentChunkIndex,
-                //     textOffset: active.textOffset,
-                //     word: active.text,
-                //     mapLen: (active.chunkIndex !== undefined && this.chunkMaps[active.chunkIndex]) ? this.chunkMaps[active.chunkIndex].length : -1,
-                //     rawMapVal: (active.chunkIndex !== undefined && this.chunkMaps[active.chunkIndex]) ? this.chunkMaps[active.chunkIndex][active.textOffset] : -1
-                // });
+                // DEBUG: Log sync details
+                console.log('[VoxTrack] Sync:', {
+                    word: active.text,
+                    time: time.toFixed(3),
+                    textOffset: active.textOffset,
+                    chunkIdx: active.chunkIndex,
+                    mapLen: this.chunkMaps[active.chunkIndex || 0]?.length,
+                    rawStart: this.chunkMaps[active.chunkIndex || 0]?.[active.textOffset]
+                });
 
 				if (lastActive === null || active.offset < lastActive.offset) {
 					currentDocOffset = this.baseOffset;

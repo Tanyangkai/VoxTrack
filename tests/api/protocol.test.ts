@@ -67,6 +67,33 @@ describe('Protocol Layer', () => {
             });
         });
 
+        it('should handle camelCase textOffset in Flat structure', () => {
+            const rawData = {
+                Metadata: [
+                    {
+                        Type: "WordBoundary",
+                        Data: {
+                            Offset: 12345,
+                            Duration: 100,
+                            text: "Camel", // lower case text key might imply flat if d.text is string
+                            textOffset: 15,
+                            WordLength: 5
+                        }
+                    }
+                ]
+            };
+            // Note: In my parser logic:
+            // d.text is "Camel" (string). typeof d.text is 'string' != 'object'.
+            // d.Text is undefined.
+            // textObj = d.
+            // isFlat = true.
+            // textOffset = d.TextOffset ?? d.textOffset
+            
+            const result = parseMetadata(rawData);
+            expect(result).toHaveLength(1);
+            expect(result[0].textOffset).toBe(15);
+        });
+
         it('should return empty array for irrelevant events', () => {
             const rawData = {
                 Metadata: [
