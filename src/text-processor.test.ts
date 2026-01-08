@@ -39,15 +39,15 @@ Content`;
     test('replaces symbols in English', () => {
         const input = '3 < 5 and a >= b';
         const result = processor.process(input, { ...defaultOptions, lang: 'en-US' });
-        // Now expecting symbols to be preserved, not replaced
-        expect(result[0]?.text).toContain('<');
-        expect(result[0]?.text).toContain('>=');
+        // Now expecting symbols to be preserved but escaped
+        expect(result[0]?.text).toContain('&lt;');
+        expect(result[0]?.text).toContain('&gt;=');
     });
 
     test('replaces symbols in Chinese', () => {
         const input = '3 < 5';
         const result = processor.process(input, { ...defaultOptions, lang: 'zh-CN' });
-        expect(result[0]?.text).toContain('<');
+        expect(result[0]?.text).toContain('&lt;');
     });
 
     test('chunks long text', () => {
