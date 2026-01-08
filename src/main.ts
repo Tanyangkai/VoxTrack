@@ -38,6 +38,7 @@ export default class VoxTrackPlugin extends Plugin {
 
 	public async onload(): Promise<void> {
 		await this.loadSettings();
+		this.applyHighlightColor();
 
 		this.player = new AudioPlayer();
 		this.syncController = new SyncController();
@@ -686,6 +687,16 @@ export default class VoxTrackPlugin extends Plugin {
             this.player.setPlaybackRate(speed);
         }
     }
+
+	public applyHighlightColor() {
+		// Remove existing color classes
+		const colors = ['yellow', 'green', 'blue', 'purple', 'red', 'none'];
+		for (const c of colors) {
+			document.body.classList.remove(`voxtrack-color-${c}`);
+		}
+		// Add selected color class
+		document.body.classList.add(`voxtrack-color-${this.settings.highlightColor || 'yellow'}`);
+	}
 
 	private updateStatus(text: string, isPlaying: boolean, isPaused: boolean) {
 		if (this.statusBarTextEl) {

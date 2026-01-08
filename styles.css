@@ -2,21 +2,24 @@
 VoxTrack Highlight Styles
 */
 
+:root {
+    --voxtrack-highlight-bg: var(--text-selection);
+}
+
 .voxtrack-active-word {
-    background-color: var(--text-selection);
+    background-color: var(--voxtrack-highlight-bg);
     color: var(--text-normal);
     border-radius: 3px;
-    box-shadow: 0 0 0 2px var(--text-selection);
+    box-shadow: 0 0 0 1px var(--voxtrack-highlight-bg);
 }
 
-/* Optional: a more prominent style */
-.theme-dark .voxtrack-active-word {
-    background-color: rgba(255, 255, 0, 0.3);
-}
-
-.theme-light .voxtrack-active-word {
-    background-color: rgba(255, 255, 0, 0.4);
-}
+/* Base variants */
+body.voxtrack-color-yellow { --voxtrack-highlight-bg: rgba(255, 255, 0, 0.4); }
+body.voxtrack-color-green { --voxtrack-highlight-bg: rgba(0, 255, 0, 0.3); }
+body.voxtrack-color-blue { --voxtrack-highlight-bg: rgba(0, 122, 255, 0.3); }
+body.voxtrack-color-purple { --voxtrack-highlight-bg: rgba(163, 0, 255, 0.3); }
+body.voxtrack-color-red { --voxtrack-highlight-bg: rgba(255, 0, 0, 0.3); }
+body.voxtrack-color-none { --voxtrack-highlight-bg: var(--text-selection); }
 
 /* Status Bar Styles */
 .status-bar-item.voxtrack-status-bar {

@@ -13,12 +13,14 @@ export interface VoxTrackSettings {
     filterFrontmatter: boolean;
     filterObsidian: boolean;
     playbackSpeed: number;
+    highlightColor: string;
 }
 
 export const DEFAULT_SETTINGS: VoxTrackSettings = {
     voice: "zh-CN-XiaoxiaoNeural",
     volume: "+0%",
     playbackSpeed: 1.0,
+    highlightColor: 'yellow',
     autoScrollMode: 'cursor', // Default to cursor for best Live Preview support
     highlightMode: 'word',
     clickToPlay: false,
@@ -157,6 +159,23 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.highlightMode)
                 .onChange(async (value) => {
                     this.plugin.settings.highlightMode = value as any;
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Highlight color')
+            .setDesc('Color of the active word being read')
+            .addDropdown(dropdown => dropdown
+                .addOption('yellow', 'Yellow')
+                .addOption('green', 'Green')
+                .addOption('blue', 'Blue')
+                .addOption('purple', 'Purple')
+                .addOption('red', 'Red')
+                .addOption('none', 'System Default')
+                .setValue(this.plugin.settings.highlightColor)
+                .onChange(async (value) => {
+                    this.plugin.settings.highlightColor = value;
+                    this.plugin.applyHighlightColor(); // Dynamic update
                     await this.plugin.saveSettings();
                 }));
     }
