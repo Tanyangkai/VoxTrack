@@ -16,7 +16,6 @@ export interface VoxTrackSettings {
     filterObsidian: boolean;
     playbackSpeed: number;
     highlightColor: string;
-    showFloatingButton: boolean;
 }
 
 export const DEFAULT_SETTINGS: VoxTrackSettings = {
@@ -27,7 +26,6 @@ export const DEFAULT_SETTINGS: VoxTrackSettings = {
     autoScrollMode: 'cursor', // Default to cursor for best Live Preview support
     highlightMode: 'word',
     clickToPlay: false,
-    showFloatingButton: true,
     filterCode: true,
     filterLinks: true,
     filterMath: true,
@@ -141,16 +139,6 @@ export class VoxTrackSettingTab extends PluginSettingTab {
         new Setting(containerEl)
             .setName(t("Interaction"))
             .setHeading();
-
-        new Setting(containerEl)
-            .setName(t("Show floating button"))
-            .setDesc(t("Show floating locator button during playback"))
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.showFloatingButton)
-                .onChange(async (value) => {
-                    this.plugin.settings.showFloatingButton = value;
-                    await this.plugin.saveSettings();
-                }));
 
         new Setting(containerEl)
             .setName(t("Auto scroll mode"))
