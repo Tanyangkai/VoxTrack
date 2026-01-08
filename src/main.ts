@@ -337,36 +337,34 @@ export default class VoxTrackPlugin extends Plugin {
 					const from = foundIndex;
 					
 					// Determine Length
-					// Use map to find 'to' if possible
+					// If we used map, we might know the exact length in raw text
+					// But we only got 'from'.
+					// Let's recalculate 'to'.
+					
 					let matchLen = wordToFind.length;
-
+					
+					// Use map to find 'to' if possible
 					if (currentMap && active.textOffset !== undefined) {
-						// Calculate using the start and END character of the word
-						// active.wordLength is length in PROCESSED text.
-						const startIdxInProcessed = active.textOffset;
-						const endIdxInProcessed = active.textOffset + active.wordLength - 1; // Inclusive last char
-
-						if (startIdxInProcessed < currentMap.length && endIdxInProcessed < currentMap.length) {
-							const rawStart = currentMap[startIdxInProcessed];
+						const endIdxInProcessed = active.textOffset + active.wordLength;
+						if (endIdxInProcessed < currentMap.length) {
 							const rawEnd = currentMap[endIdxInProcessed];
-							
-							if (rawStart !== undefined && rawEnd !== undefined) {
-								// TrackedString maps each char to its source index.
-								// If 1-to-1: word->word, map is 0,1,2,3. Diff=3, Len=4.
-								// If 1-to-many: &->&amp;, map is 0,0,0,0,0. Diff=0, Len=1.
-								// If many-to-1: **B**->B, map is 2. Diff=0, Len=1.
-								const calculatedLen = (rawEnd - rawStart) + 1;
-								if (calculatedLen > 0) {
-									matchLen = calculatedLen;
+							if (rawEnd !== undefined && rawEnd !== -1) {
+								const absEnd = chunkBaseOffset + rawEnd;
+								if (absEnd > from) {
+									matchLen = absEnd - from;
 								}
 							}
 						}
 					}
 					
-					// Fallback length verification (only if we didn't use map or map resulted in weird length)
-					// But for things like &amp; -> &, string comparison will fail.
-					// So we trust map if available.
-					
+					// Fallback length calculation
+					if (docText.substring(from, from + matchLen) !== wordToFind) {
+						const cleanWord = wordToFind.replace(/[.,;!?。，；！？、]/g, '');
+						if (docText.substring(from, from + cleanWord.length) === cleanWord) {
+							matchLen = cleanWord.length;
+						}
+					}
+
 					const to = from + matchLen;
 					currentDocOffset = to;
 
@@ -437,8 +435,18 @@ export default class VoxTrackPlugin extends Plugin {
 		const volume = this.settings.volume || '+0%';
 		const lang = voice.startsWith('zh') ? 'zh-CN' : 'en-US';
 
-		// Text is already escaped by TextProcessor
-		const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='${lang}'><voice name='${voice}'><prosody pitch='${pitch}' rate='${rate}' volume='${volume}'>${text}</prosody></voice></speak>`;
+		const escapedText = text.replace(/[<>&"']/g, (c) => {
+			switch (c) {
+				case '<': return '&lt;';
+				case '>': return '&gt;';
+				case '&': return '&amp;';
+				case '"': return '&quot;';
+				case "'": return '&apos;';
+				default: return c;
+			}
+		});
+
+		const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='${lang}'><voice name='${voice}'><prosody pitch='${pitch}' rate='${rate}' volume='${volume}'>${escapedText}</prosody></voice></speak>`;
 
 		try {
 			await this.socket.sendSSML(ssml, uuidv4().replace(/-/g, ''));

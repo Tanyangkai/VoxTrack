@@ -80,14 +80,6 @@ export class TextProcessor {
         // 7. Final Cleanup
         ts.replace(/\n{3,}/, '\n\n');
 
-        // 8. HTML Escaping (Must be last to ensure offsets match what is sent to TTS)
-        // Order is important: & must be first to avoid double escaping
-        ts.replace(/&/g, '&amp;');
-        ts.replace(/</g, '&lt;');
-        ts.replace(/>/g, '&gt;');
-        ts.replace(/"/g, '&quot;');
-        ts.replace(/'/g, '&apos;');
-
         // Trim
         ts.trim();
 
