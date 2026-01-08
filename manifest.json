@@ -3,7 +3,7 @@
 	"name": "VoxTrack",
 	"minAppVersion": "0.15.0",
 	"description": "High-precision Text-to-Speech (TTS) plugin for Obsidian tracking reading progress word-by-word with natural voices.",
-	"author": "yangkai tan",
+	"author": "yangkaitan",
 	"authorUrl": "",
 	"fundingUrl": "",
 	"isDesktopOnly": false,
