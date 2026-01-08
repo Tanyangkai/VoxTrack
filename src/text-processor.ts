@@ -37,7 +37,7 @@ export class TextProcessor {
             ts.remove(/>\s*\[!.*\][^\n]*\n/); // Callout headers
             ts.remove(/%%[\s\S]*?%%/); // Comments
             ts.remove(/<!--[\s\S]*?-->/); // HTML Comments
-            ts.remove(/<[^>]+>/); // Generic HTML tags (like <br>, <div>)
+            ts.remove(/<[a-zA-Z\/][^>]*>/); // Generic HTML tags (like <br>, <div>)
             ts.remove(/\^[\w-]+/); // Block IDs
         }
 

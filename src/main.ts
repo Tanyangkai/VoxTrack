@@ -18,6 +18,7 @@ export default class VoxTrackPlugin extends Plugin {
 	private textProcessor: TextProcessor;
 	private isPlaying: boolean = false;
 	private isPaused: boolean = false;
+	private activeMode: 'auto' | 'cursor' | null = null;
 	private isTransferFinished: boolean = false;
 	private hasShownReceivingNotice: boolean = false;
 	private activeEditor: Editor | null = null;
@@ -548,16 +549,24 @@ export default class VoxTrackPlugin extends Plugin {
 
 	private async togglePlay(editor: Editor, mode: 'auto' | 'cursor', statusBar: HTMLElement) {
 		if (this.isPlaying) {
-			if (this.isPaused) {
-				await this.player.play();
-				this.isPaused = false;
-				this.updateStatus('VoxTrack: Playing...', true, false);
+			// If user explicitly triggers "Read from cursor" command, 
+			// we should always restart regardless of current state.
+			if (mode === 'cursor') {
+				this.stopPlayback(statusBar);
+				// Continue to start new playback below
 			} else {
-				this.player.pause();
-				this.isPaused = true;
-				this.updateStatus('VoxTrack: Paused', true, true);
+				// Regular toggle behavior for status bar button or general play command
+				if (this.isPaused) {
+					await this.player.play();
+					this.isPaused = false;
+					this.updateStatus('VoxTrack: Playing...', true, false);
+				} else {
+					this.player.pause();
+					this.isPaused = true;
+					this.updateStatus('VoxTrack: Paused', true, true);
+				}
+				return;
 			}
-			return;
 		}
 
 		let rawText = '';
@@ -588,6 +597,7 @@ export default class VoxTrackPlugin extends Plugin {
 		this.textChunks = [];
 		this.chunkOffsets = [];
 		this.currentChunkIndex = 0;
+		this.activeMode = mode;
 
 		const voice = this.settings.voice || 'zh-CN-XiaoxiaoNeural';
 		const lang = voice.startsWith('zh') ? 'zh-CN' : 'en-US';
@@ -652,6 +662,7 @@ export default class VoxTrackPlugin extends Plugin {
 	private stopPlayback(statusBar?: HTMLElement) {
 		this.isPlaying = false;
 		this.isPaused = false;
+		this.activeMode = null;
 		this.isTransferFinished = false;
 		if (this.syncInterval) cancelAnimationFrame(this.syncInterval);
 		this.player.stop();
@@ -674,6 +685,7 @@ export default class VoxTrackPlugin extends Plugin {
 	private handlePlaybackFinished(statusBar?: HTMLElement) {
 		this.isPlaying = false;
 		this.isPaused = false;
+		this.activeMode = null;
 		this.isTransferFinished = false;
 		if (this.syncInterval) cancelAnimationFrame(this.syncInterval);
 		this.syncController.reset();
