@@ -226,16 +226,6 @@ export default class VoxTrackPlugin extends Plugin {
 										}
 									}
 								}
-
-										                                                this.chunkScanOffset = found + 1;
-
-										                                            }
-
-										                                        }
-
-										                                    }
-
-										                                }
 								this.syncController.addMetadata(metadata);
 							}
 						} catch (e) {
