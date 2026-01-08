@@ -33,7 +33,7 @@ Content`;
     test('removes math', () => {
         const input = 'Text $$E=mc^2$$ and $x$';
         const result = processor.process(input, defaultOptions);
-        if (result[0]) expect(result[0].text.trim()).toBe('Text  and');
+        if (result[0]) expect(result[0].text.trim()).toBe('Text and');
     });
 
     test('replaces symbols in English', () => {
@@ -104,7 +104,7 @@ Content`;
     test('removes emojis', () => {
         const input = 'Start 🏗️ End';
         const result = processor.process(input, defaultOptions);
-        expect(result[0]?.text).toBe('Start  End');
+        expect(result[0]?.text).toBe('Start End');
     });
 
 });
