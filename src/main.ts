@@ -498,8 +498,8 @@ export default class VoxTrackPlugin extends Plugin {
 
 	private async sendChunk(text: string, statusBar?: HTMLElement) {
 		const voice = this.settings.voice || 'zh-CN-XiaoxiaoNeural';
-		const rate = this.settings.rate || '+0%';
-		const pitch = this.settings.pitch || '+0Hz';
+		const rate = '+0%';
+		const pitch = '+0Hz';
 		const volume = this.settings.volume || '+0%';
 		const lang = voice.startsWith('zh') ? 'zh-CN' : 'en-US';
 

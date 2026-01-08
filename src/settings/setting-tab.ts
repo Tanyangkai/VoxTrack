@@ -3,8 +3,6 @@ import VoxTrackPlugin from "../main";
 
 export interface VoxTrackSettings {
     voice: string;
-    rate: string;
-    pitch: string;
     volume: string;
     autoScrollMode: 'off' | 'center' | 'cursor';
     highlightMode: 'word' | 'sentence' | 'none';
@@ -19,8 +17,6 @@ export interface VoxTrackSettings {
 
 export const DEFAULT_SETTINGS: VoxTrackSettings = {
     voice: "zh-CN-XiaoxiaoNeural",
-    rate: "+0%",
-    pitch: "+0Hz",
     volume: "+0%",
     playbackSpeed: 1.0,
     autoScrollMode: 'cursor', // Default to cursor for best Live Preview support
@@ -57,28 +53,6 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                 .setValue(this.plugin.settings.voice)
                 .onChange(async (value) => {
                     this.plugin.settings.voice = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
-            .setName('Speech rate')
-            .setDesc('Speech rate (e.g. +0%)')
-            .addText(text => text
-                .setPlaceholder('+0%')
-                .setValue(this.plugin.settings.rate)
-                .onChange(async (value) => {
-                    this.plugin.settings.rate = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        new Setting(containerEl)
-            .setName('Speech pitch')
-            .setDesc('Speech pitch (e.g. +0Hz)')
-            .addText(text => text
-                .setPlaceholder('+0Hz')
-                .setValue(this.plugin.settings.pitch)
-                .onChange(async (value) => {
-                    this.plugin.settings.pitch = value;
                     await this.plugin.saveSettings();
                 }));
 
