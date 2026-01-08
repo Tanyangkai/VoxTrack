@@ -201,12 +201,12 @@ export default class VoxTrackPlugin extends Plugin {
 
 												// Advance scan offset, ensuring we don't skip too much if words overlap (unlikely)
 												// Use a safe increment.
-												this.chunkScanOffset = found + 1; 
-											} else {
-                                                console.warn(`[VoxTrack] Correction Failed: "${m.text}" not found after ${this.chunkScanOffset}`);
-                                            }
-										}
-									}
+												                                                // Use a safe increment.
+																						this.chunkScanOffset = found + 1; 
+																					} else {
+												                                                console.debug(`[VoxTrack] Correction Failed: "${m.text}" not found after ${this.chunkScanOffset}`);
+												                                            }
+																					}									}
 								} else {
 									for (const m of metadata) {
 										m.chunkIndex = this.currentChunkIndex;
@@ -222,12 +222,12 @@ export default class VoxTrackPlugin extends Plugin {
 												m.wordLength = expanded.length;
 												m.text = currentChunkText.substring(expanded.start, expanded.start + expanded.length);
 
-												this.chunkScanOffset = found + 1;
-											} else {
-                                                console.warn(`[VoxTrack] Correction Failed: "${m.text}" not found after ${this.chunkScanOffset}`);
-                                            }
-										}
-									}
+												                                                // Use a safe increment.
+																						this.chunkScanOffset = found + 1; 
+																					} else {
+												                                                console.debug(`[VoxTrack] Correction Failed: "${m.text}" not found after ${this.chunkScanOffset}`);
+												                                            }
+																					}									}
 								}
 								this.syncController.addMetadata(metadata);
 							}
