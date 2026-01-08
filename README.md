@@ -1,62 +1,63 @@
-# VoxTrack
+# VoxTrack 🎧
 
-![Status](https://img.shields.io/badge/Status-Stable-success)
-![Version](https://img.shields.io/badge/Version-1.0.0-blue)
+VoxTrack is a high-precision Text-to-Speech (TTS) plugin for Obsidian that tracks your reading progress word-by-word with natural-sounding voices powered by Edge TTS.
 
-**VoxTrack** is a high-precision Text-to-Speech (TTS) plugin for Obsidian that offers a true-to-life reading experience. By integrating Microsoft Edge's natural voices and a custom synchronization engine, VoxTrack allows you to listen to your notes while visually tracking the reading progress word-by-word or sentence-by-sentence.
+![VoxTrack Demo](https://via.placeholder.com/800x400?text=VoxTrack+Demo+GIF+Placeholder) <!-- TODO: Replace with real GIF -->
 
 ## ✨ Features
 
-- **Natural Voices**: Support for high-quality, neural network-based voices from Microsoft Edge TTS (e.g., "Xiaoxiao", "Yunxi").
-- **Precision Tracking**: Real-time visual highlighting of the currently spoken word or sentence, ensuring you never lose your place.
-- **Seamless Integration**: Uses CodeMirror decorations to render highlights without modifying your Markdown source code.
-- **Smart Control**: 
-    - Click any line gutter to jump play.
-    - Auto-scroll to keep the active text in view.
-    - Global hotkeys for Play/Pause/Stop.
+- **Word-Level Tracking**: Real-time highlighting of the exact word being spoken.
+- **Natural Voices**: Support for high-quality Microsoft Edge TTS neural voices.
+- **Adaptive Buffer Management**: Smoothly handles ultra-long documents without memory issues or crashes.
+- **Table Support**: Intelligent handling of Markdown tables for seamless reading.
+- **Customizable Experience**:
+  - **Playback Speed**: Adjust speed from 0.5x to 3.0x on the fly.
+  - **Highlight Modes**: Toggle between Word, Sentence, or no highlighting.
+  - **Color Presets**: Choose from Yellow, Green, Blue, Purple, or Red highlighters.
+  - **Auto-Scroll**: Automatically follows the speech, with optional cursor movement.
 
-## 🚀 Usage
+## 🚀 Getting Started
 
-### Starting Playback
-1.  **Select text** or place your cursor anywhere in the note you want to read.
-2.  Open the **Command Palette** (`Cmd/Ctrl + P`) and run `VoxTrack: Play/Pause`.
-3.  Or, click the **VoxTrack** icon in the status bar.
+1. Install the plugin via Obsidian Community Plugins (pending) or manually.
+2. Open the VoxTrack settings tab to select your preferred **Voice role**.
+3. Use the **Play / pause** command (or the ribbon icon) to start listening to your active note.
+4. Use **Read from cursor** to start from a specific point.
 
-### Controls
-- **Play/Pause**: `Space` (when focus is on the player) or use the command `VoxTrack: Play/Pause`.
-- **Stop**: `Esc` or use the command `VoxTrack: Stop`.
-- **Global Shortcuts**: You can assign custom hotkeys to these commands in Obsidian Settings > Hotkeys.
+## 🛠 Installation
 
-## ⚙️ Settings
+### Manual Installation
+1. Download the latest release (`main.js`, `manifest.json`, `styles.css`) from the [Releases](https://github.com/Tanyangkai/VoxTrack/releases) page.
+2. Create a folder named `voxtrack` in your Obsidian vault's `.obsidian/plugins/` directory.
+3. Move the downloaded files into that folder.
+4. Reload Obsidian and enable VoxTrack in the Community Plugins settings.
 
-Go to **Settings > VoxTrack** to customize your experience:
+## 🏗 Development
 
-- **Voice**: Select your preferred language and voice role.
-- **Speed & Pitch**: Adjust the reading speed and pitch.
-- **Highlight Mode**: Choose between `Word` (default), `Sentence`, or `None`.
-- **Auto Scroll**: Toggle automatic scrolling to the active line.
+### Setup
+```bash
+npm install
+```
 
-## 🛠️ Development
+### Build
+```bash
+npm run build
+```
 
-If you want to build VoxTrack from source or contribute:
+### Run Tests
+```bash
+npm test
+```
 
-1.  **Clone the repository**:
-    ```bash
-    git clone https://github.com/yourusername/voxtrack.git
-    cd voxtrack
-    ```
-2.  **Install dependencies**:
-    ```bash
-    npm install
-    ```
-3.  **Run in dev mode**:
-    ```bash
-    npm run dev
-    ```
-    This will compile the plugin and watch for changes.
-4.  **Install to Obsidian**:
-    Symlink or copy `main.js`, `manifest.json`, and `styles.css` to your vault's `.obsidian/plugins/voxtrack/` directory.
+## 🗺 Roadmap
+- [ ] Internationalization (i18n) support (Chinese/English).
+- [ ] Multi-engine support (Azure, OpenAI, Local TTS).
+- [ ] Export audio to MP3 files.
+- [ ] Support for PDF and Canvas views.
 
-## 📄 License
+## 🤝 Contributing
 
-This project is licensed under the **0-BSD** License.
+Contributions are welcome! Please feel free to submit a Pull Request or open an issue for feature requests.
+
+## 📜 License
+
+This project is licensed under the [0-BSD License](LICENSE).
