@@ -47,9 +47,16 @@ export class VoxTrackSettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Voice role')
-            .setDesc('Select the capability of the speaker (e.g. Xiaoxiao, Yunxi)')
-            .addText(text => text
-                .setPlaceholder('zh-CN-XiaoxiaoNeural')
+            .setDesc('Select a voice for text-to-speech')
+            .addDropdown(dropdown => dropdown
+                .addOption('zh-CN-XiaoxiaoNeural', 'Xiaoxiao (Female, CN)')
+                .addOption('zh-CN-YunxiNeural', 'Yunxi (Male, CN)')
+                .addOption('zh-CN-YunjianNeural', 'Yunjian (Male, CN)')
+                .addOption('zh-HK-HiuMaanNeural', 'HiuMaan (Female, HK)')
+                .addOption('zh-TW-HsiaoChenNeural', 'HsiaoChen (Female, TW)')
+                .addOption('en-US-AvaNeural', 'Ava (Female, US)')
+                .addOption('en-US-AndrewNeural', 'Andrew (Male, US)')
+                .addOption('en-GB-SoniaNeural', 'Sonia (Female, UK)')
                 .setValue(this.plugin.settings.voice)
                 .onChange(async (value) => {
                     this.plugin.settings.voice = value;

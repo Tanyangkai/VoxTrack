@@ -100,7 +100,6 @@ export class AudioPlayer {
                 // Remove from start of buffer up to safe point
                 // Note: remove() triggers 'updateend', which will call processQueue again
                 this.sourceBuffer.remove(buffered.start(0), removeEnd);
-                console.log(`[VoxTrack] Cleaned buffer up to ${removeEnd.toFixed(2)}s`);
             } catch (e) {
                 console.error('[VoxTrack] Buffer cleanup failed', e);
             }
@@ -120,7 +119,6 @@ export class AudioPlayer {
         try {
             await this.audio.play();
             this.isPlaying = true;
-            console.log('[VoxTrack] Playback started');
         } catch (e) {
             // Auto-play might be blocked until user interaction
             console.warn('[VoxTrack] Playback pending user interaction', e);

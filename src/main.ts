@@ -181,10 +181,6 @@ export default class VoxTrackPlugin extends Plugin {
 							const metadata = parseMetadata(jsonObj);
 							if (metadata.length > 0) {
 								const currentChunkText = this.textChunks[this.currentChunkIndex] || '';
-                                // DEBUG: Log chunk text once
-                                if (this.chunkScanOffset === 0 && this.currentChunkIndex === 0 && metadata[0].offset < 5000000) {
-                                    console.log('[VoxTrack] Current Chunk Text:', JSON.stringify(currentChunkText));
-                                }
 
 								if (this.audioTimeOffset > 0) {
 									for (const m of metadata) {
@@ -268,16 +264,6 @@ export default class VoxTrackPlugin extends Plugin {
 			const active = this.syncController.findActiveMetadata(time);
 
 			if (active && active !== lastActive && this.activeEditor) {
-                // DEBUG: Log sync details
-                console.log('[VoxTrack] Sync:', {
-                    word: active.text,
-                    time: time.toFixed(3),
-                    textOffset: active.textOffset,
-                    chunkIdx: active.chunkIndex,
-                    mapLen: this.chunkMaps[active.chunkIndex || 0]?.length,
-                    rawStart: this.chunkMaps[active.chunkIndex || 0]?.[active.textOffset]
-                });
-
 				if (lastActive === null || active.offset < lastActive.offset) {
 					currentDocOffset = this.baseOffset;
 				}
@@ -444,9 +430,6 @@ export default class VoxTrackPlugin extends Plugin {
 					}
 				} else {
 					console.warn(`[VoxTrack] Sync: Could not find "${wordToFind}" after ${currentDocOffset} (base: ${chunkBaseOffset})`);
-					// Debug context
-					const context = docText.substring(currentDocOffset, Math.min(currentDocOffset + 50, docText.length));
-					console.debug(`[VoxTrack] Sync Context: Next 50 chars in doc: "${context}"`);
 				}
 			}
 
