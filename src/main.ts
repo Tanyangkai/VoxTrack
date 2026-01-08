@@ -30,6 +30,8 @@ export default class VoxTrackPlugin extends Plugin {
 	private chunkOffsets: number[] = [];
 	private audioTimeOffset: number = 0;
 	private chunkScanOffset: number = 0;
+	private lastHighlightFrom: number = -1;
+	private lastHighlightTo: number = -1;
 
 	// Status Bar Elements
 	private statusBarItemEl: HTMLElement;
@@ -189,65 +191,41 @@ export default class VoxTrackPlugin extends Plugin {
 										m.offset += this.audioTimeOffset;
 										m.chunkIndex = this.currentChunkIndex;
 
-										                                        // Auto-correct Text Offset
+										// Auto-correct Text Offset
+										if (currentChunkText) {
+											const searchText = this.unescapeHtml(m.text);
+											const found = currentChunkText.indexOf(searchText, this.chunkScanOffset);
+											if (found !== -1) {
+												// Try to expand selection to full word if it looks like a partial match
+												const expanded = this.expandWordSelection(currentChunkText, found, searchText.length);
+												m.textOffset = expanded.start;
+												m.wordLength = expanded.length;
+												m.text = currentChunkText.substring(expanded.start, expanded.start + expanded.length);
 
-										                                        if (currentChunkText) {
+												// Advance scan offset
+												this.chunkScanOffset = found + 1;
+											}
+										}
+									}
+								} else {
+									for (const m of metadata) {
+										m.chunkIndex = this.currentChunkIndex;
 
-										                                            const searchText = this.unescapeHtml(m.text);
+										// Auto-correct Text Offset
+										if (currentChunkText) {
+											const searchText = this.unescapeHtml(m.text);
+											const found = currentChunkText.indexOf(searchText, this.chunkScanOffset);
+											if (found !== -1) {
+												const expanded = this.expandWordSelection(currentChunkText, found, searchText.length);
+												m.textOffset = expanded.start;
+												m.wordLength = expanded.length;
+												m.text = currentChunkText.substring(expanded.start, expanded.start + expanded.length);
 
-										                                            const found = currentChunkText.indexOf(searchText, this.chunkScanOffset);
-
-										                                            if (found !== -1) {
-
-										                                                // Try to expand selection to full word if it looks like a partial match
-
-										                                                const expanded = this.expandWordSelection(currentChunkText, found, searchText.length);
-
-										                                                m.textOffset = expanded.start;
-
-										                                                m.wordLength = expanded.length;
-
-										                                                m.text = currentChunkText.substring(expanded.start, expanded.start + expanded.length);
-
-										
-
-										                                                // Advance scan offset
-
-										                                                this.chunkScanOffset = found + 1; 
-
-										                                            }
-
-										                                        }
-
-										                                    }
-
-										                                } else {
-
-										                                    for (const m of metadata) {
-
-										                                        m.chunkIndex = this.currentChunkIndex;
-
-										                                        
-
-										                                        // Auto-correct Text Offset
-
-										                                        if (currentChunkText) {
-
-										                                            const searchText = this.unescapeHtml(m.text);
-
-										                                            const found = currentChunkText.indexOf(searchText, this.chunkScanOffset);
-
-										                                            if (found !== -1) {
-
-										                                                const expanded = this.expandWordSelection(currentChunkText, found, searchText.length);
-
-										                                                m.textOffset = expanded.start;
-
-										                                                m.wordLength = expanded.length;
-
-										                                                m.text = currentChunkText.substring(expanded.start, expanded.start + expanded.length);
-
-										
+												this.chunkScanOffset = found + 1;
+											}
+										}
+									}
+								}
 
 										                                                this.chunkScanOffset = found + 1;
 
@@ -429,70 +407,75 @@ export default class VoxTrackPlugin extends Plugin {
 					let highlightFrom = from;
 					let highlightTo = to;
 
-					if (this.settings.highlightMode === 'none') {
-						// Skip updating decorations but still handle scrolling/cursor
-					} else if (this.settings.highlightMode === 'sentence') {
-						// Expand to sentence boundaries
+					if (this.settings.highlightMode === 'sentence') {
+						// Expand to sentence boundaries WITHOUT creating large substrings
 						// Look backward for sentence start
-						const before = docText.substring(0, from);
-						const lastTerminator = Math.max(
-							before.lastIndexOf('.'),
-							before.lastIndexOf('!'),
-							before.lastIndexOf('?'),
-							before.lastIndexOf('。'),
-							before.lastIndexOf('！'),
-							before.lastIndexOf('？'),
-							before.lastIndexOf('\n')
-						);
+						const terminators = ['.', '!', '?', '。', '！', '？', '\n'];
+						let lastTerminator = -1;
+						for (const t of terminators) {
+							const idx = docText.lastIndexOf(t, from - 1);
+							if (idx > lastTerminator) lastTerminator = idx;
+						}
 						highlightFrom = lastTerminator === -1 ? 0 : lastTerminator + 1;
 
 						// Look forward for sentence end
-						const after = docText.substring(to);
-						const nextTerminator = after.search(/[.!?。！？\n]/);
-						highlightTo = nextTerminator === -1 ? docText.length : to + nextTerminator + 1;
-						
-						// Trim whitespace from highlight range
-						const sentenceText = docText.substring(highlightFrom, highlightTo);
-						const trimmedStart = sentenceText.search(/\S/);
-						if (trimmedStart !== -1) {
-							highlightFrom += trimmedStart;
+						let nextTerminator = -1;
+						for (const t of terminators) {
+							const idx = docText.indexOf(t, to);
+							if (idx !== -1 && (nextTerminator === -1 || idx < nextTerminator)) {
+								nextTerminator = idx;
+							}
 						}
-						const trimmedEnd = sentenceText.search(/\s*$/);
-						if (trimmedEnd !== -1) {
-							highlightTo = highlightFrom + trimmedEnd;
+						highlightTo = nextTerminator === -1 ? docText.length : nextTerminator + 1;
+						
+						// Basic trimming logic without large substring creation
+						while (highlightFrom < highlightTo && /\s/.test(docText[highlightFrom] || '')) {
+							highlightFrom++;
+						}
+						while (highlightTo > highlightFrom && /\s/.test(docText[highlightTo - 1] || '')) {
+							highlightTo--;
 						}
 					}
 
-					const view = (this.activeEditor as any).cm || (this.activeEditor as any).editor?.cm || (this.activeEditor as any).view;
-					if (view && view.dispatch) {
-						// Defensive check: CodeMirror Mark decorations cannot be empty (from === to).
-						// Ensure we have at least 1 character if possible, or skip update.
-						let safeTo = highlightTo;
-						if (safeTo <= highlightFrom) {
-							if (highlightFrom < docText.length) {
-								safeTo = highlightFrom + 1;
-							} else {
-								// End of doc, cannot extend.
-								// If from > 0, try extending backwards? Or just ignore.
-								// Ignoring is safest to prevent crash.
-								return; 
+					// Dirty Check: Only dispatch if range changed OR it's the first time
+					if (highlightFrom === this.lastHighlightFrom && highlightTo === this.lastHighlightTo) {
+						// Range hasn't changed, but we might still need to scroll if the first word changed?
+						// Usually if range hasn't changed, it means we are in the same word (or same sentence).
+						// So we can skip.
+					} else {
+						this.lastHighlightFrom = highlightFrom;
+						this.lastHighlightTo = highlightTo;
+
+						const view = (this.activeEditor as any).cm || (this.activeEditor as any).editor?.cm || (this.activeEditor as any).view;
+						if (view && view.dispatch) {
+							let safeTo = highlightTo;
+							if (safeTo <= highlightFrom) {
+								if (highlightFrom < docText.length) {
+									safeTo = highlightFrom + 1;
+								} else {
+									return; 
+								}
 							}
+
+							const shouldScroll = this.settings.autoScrollMode !== 'off';
+							const shouldMoveCursor = this.settings.autoScrollMode === 'cursor';
+
+							const transaction: any = {
+								scrollIntoView: shouldScroll
+							};
+
+							// Only add highlight effect if mode is NOT 'none'
+							if (this.settings.highlightMode !== 'none') {
+								transaction.effects = [setActiveRange.of({ from: highlightFrom, to: safeTo })];
+							}
+
+							// If mode is 'cursor', move cursor to ensure Live Preview renders Source Mode for tables
+							if (shouldMoveCursor) {
+								transaction.selection = { anchor: safeTo };
+							}
+
+							view.dispatch(transaction);
 						}
-
-						const shouldScroll = this.settings.autoScrollMode !== 'off';
-						const shouldMoveCursor = this.settings.autoScrollMode === 'cursor';
-
-						const transaction: any = {
-							effects: this.settings.highlightMode !== 'none' ? setActiveRange.of({ from: highlightFrom, to: safeTo }) : [],
-							scrollIntoView: shouldScroll
-						};
-
-						// If mode is 'cursor', move cursor to ensure Live Preview renders Source Mode for tables
-						if (shouldMoveCursor) {
-							transaction.selection = { anchor: safeTo };
-						}
-
-						view.dispatch(transaction);
 					}
 				} else {
 					console.warn(`[VoxTrack] Sync: Could not find "${wordToFind}" after ${currentDocOffset} (base: ${chunkBaseOffset})`);
@@ -701,6 +684,8 @@ export default class VoxTrackPlugin extends Plugin {
 		this.isPaused = false;
 		this.activeMode = null;
 		this.isTransferFinished = false;
+		this.lastHighlightFrom = -1;
+		this.lastHighlightTo = -1;
 		if (this.syncInterval) cancelAnimationFrame(this.syncInterval);
 		this.player.stop();
 		this.socket.close();
@@ -724,6 +709,8 @@ export default class VoxTrackPlugin extends Plugin {
 		this.isPaused = false;
 		this.activeMode = null;
 		this.isTransferFinished = false;
+		this.lastHighlightFrom = -1;
+		this.lastHighlightTo = -1;
 		if (this.syncInterval) cancelAnimationFrame(this.syncInterval);
 		this.syncController.reset();
 
