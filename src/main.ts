@@ -426,14 +426,51 @@ export default class VoxTrackPlugin extends Plugin {
 					const to = from + matchLen;
 					currentDocOffset = to;
 
+					let highlightFrom = from;
+					let highlightTo = to;
+
+					if (this.settings.highlightMode === 'none') {
+						// Skip updating decorations but still handle scrolling/cursor
+					} else if (this.settings.highlightMode === 'sentence') {
+						// Expand to sentence boundaries
+						// Look backward for sentence start
+						const before = docText.substring(0, from);
+						const lastTerminator = Math.max(
+							before.lastIndexOf('.'),
+							before.lastIndexOf('!'),
+							before.lastIndexOf('?'),
+							before.lastIndexOf('。'),
+							before.lastIndexOf('！'),
+							before.lastIndexOf('？'),
+							before.lastIndexOf('\n')
+						);
+						highlightFrom = lastTerminator === -1 ? 0 : lastTerminator + 1;
+
+						// Look forward for sentence end
+						const after = docText.substring(to);
+						const nextTerminator = after.search(/[.!?。！？\n]/);
+						highlightTo = nextTerminator === -1 ? docText.length : to + nextTerminator + 1;
+						
+						// Trim whitespace from highlight range
+						const sentenceText = docText.substring(highlightFrom, highlightTo);
+						const trimmedStart = sentenceText.search(/\S/);
+						if (trimmedStart !== -1) {
+							highlightFrom += trimmedStart;
+						}
+						const trimmedEnd = sentenceText.search(/\s*$/);
+						if (trimmedEnd !== -1) {
+							highlightTo = highlightFrom + trimmedEnd;
+						}
+					}
+
 					const view = (this.activeEditor as any).cm || (this.activeEditor as any).editor?.cm || (this.activeEditor as any).view;
 					if (view && view.dispatch) {
 						// Defensive check: CodeMirror Mark decorations cannot be empty (from === to).
 						// Ensure we have at least 1 character if possible, or skip update.
-						let safeTo = to;
-						if (safeTo <= from) {
-							if (from < docText.length) {
-								safeTo = from + 1;
+						let safeTo = highlightTo;
+						if (safeTo <= highlightFrom) {
+							if (highlightFrom < docText.length) {
+								safeTo = highlightFrom + 1;
 							} else {
 								// End of doc, cannot extend.
 								// If from > 0, try extending backwards? Or just ignore.
@@ -446,7 +483,7 @@ export default class VoxTrackPlugin extends Plugin {
 						const shouldMoveCursor = this.settings.autoScrollMode === 'cursor';
 
 						const transaction: any = {
-							effects: setActiveRange.of({ from, to: safeTo }),
+							effects: this.settings.highlightMode !== 'none' ? setActiveRange.of({ from: highlightFrom, to: safeTo }) : [],
 							scrollIntoView: shouldScroll
 						};
 
