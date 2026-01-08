@@ -450,13 +450,23 @@ export default class VoxTrackPlugin extends Plugin {
 		let newEnd = start + length;
 
 		// Expand Left (English/Number only)
-		while (newStart > 0 && /[\w]/.test(text[newStart - 1])) {
-			newStart--;
+		while (newStart > 0) {
+			const prevChar = text[newStart - 1];
+			if (prevChar && /[\w]/.test(prevChar)) {
+				newStart--;
+			} else {
+				break;
+			}
 		}
 
 		// Expand Right (English/Number only)
-		while (newEnd < text.length && /[\w]/.test(text[newEnd])) {
-			newEnd++;
+		while (newEnd < text.length) {
+			const nextChar = text[newEnd];
+			if (nextChar && /[\w]/.test(nextChar)) {
+				newEnd++;
+			} else {
+				break;
+			}
 		}
 
 		return { start: newStart, length: newEnd - newStart };

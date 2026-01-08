@@ -162,3 +162,5 @@ export class AudioPlayer {
         this.mediaSource = null;
         this.isInputFinished = false;
     }
+}
+

@@ -91,7 +91,9 @@ describe('Protocol Layer', () => {
             
             const result = parseMetadata(rawData);
             expect(result).toHaveLength(1);
-            expect(result[0].textOffset).toBe(15);
+            if (result[0]) {
+                expect(result[0].textOffset).toBe(15);
+            }
         });
 
         it('should return empty array for irrelevant events', () => {
