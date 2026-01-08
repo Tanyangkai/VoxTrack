@@ -1,5 +1,6 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import VoxTrackPlugin from "../main";
+import { t } from "../i18n/translations";
 
 export interface VoxTrackSettings {
     voice: string;
@@ -44,12 +45,12 @@ export class VoxTrackSettingTab extends PluginSettingTab {
         containerEl.empty();
 
         new Setting(containerEl)
-            .setName('Voice options')
+            .setName(t("Voice options"))
             .setHeading();
 
         new Setting(containerEl)
-            .setName('Voice role')
-            .setDesc('Select a voice for text-to-speech')
+            .setName(t("Voice role"))
+            .setDesc(t("Voice role desc"))
             .addDropdown(dropdown => dropdown
                 .addOption('zh-CN-XiaoxiaoNeural', 'Xiaoxiao (Female, CN)')
                 .addOption('zh-CN-YunxiNeural', 'Yunxi (Male, CN)')
@@ -66,8 +67,8 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
-            .setName('Playback speed')
-            .setDesc('Audio playback multiplier (0.5x - 3.0x). Does not require re-generation.')
+            .setName(t("Playback speed"))
+            .setDesc(t("Playback speed desc"))
             .addSlider(slider => slider
                 .setLimits(0.5, 3.0, 0.1)
                 .setValue(this.plugin.settings.playbackSpeed)
@@ -79,12 +80,12 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
-            .setName('Text filters')
+            .setName(t("Text filters"))
             .setHeading();
 
         new Setting(containerEl)
-            .setName('Filter frontmatter')
-            .setDesc('Skip YAML frontmatter at the beginning of the note')
+            .setName(t("Filter frontmatter"))
+            .setDesc(t("Filter frontmatter desc"))
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.filterFrontmatter)
                 .onChange(async (value) => {
@@ -93,8 +94,8 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
-            .setName('Filter code blocks')
-            .setDesc('Skip code blocks and inline code')
+            .setName(t("Filter code blocks"))
+            .setDesc(t("Filter code blocks desc"))
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.filterCode)
                 .onChange(async (value) => {
@@ -103,8 +104,8 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
-            .setName('Filter links')
-            .setDesc('Read link caption only, skip URL')
+            .setName(t("Filter links"))
+            .setDesc(t("Filter links desc"))
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.filterLinks)
                 .onChange(async (value) => {
@@ -113,8 +114,8 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
-            .setName('Filter math')
-            .setDesc('Skip LaTeX math equations')
+            .setName(t("Filter math"))
+            .setDesc(t("Filter math desc"))
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.filterMath)
                 .onChange(async (value) => {
@@ -123,8 +124,8 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
-            .setName('Filter Obsidian syntax')
-            .setDesc('Skip callouts, comments, and other metadata')
+            .setName(t("Filter Obsidian syntax"))
+            .setDesc(t("Filter Obsidian desc"))
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.filterObsidian)
                 .onChange(async (value) => {
@@ -133,16 +134,16 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
-            .setName('Interaction')
+            .setName(t("Interaction"))
             .setHeading();
 
         new Setting(containerEl)
-            .setName('Auto scroll mode')
-            .setDesc('How the editor should follow the speech')
+            .setName(t("Auto scroll mode"))
+            .setDesc(t("Auto scroll mode desc"))
             .addDropdown(dropdown => dropdown
-                .addOption('off', 'Off')
-                .addOption('center', 'Scroll only (Keep cursor)')
-                .addOption('cursor', 'Scroll & Move Cursor (Recommended for LP Tables)')
+                .addOption('off', t("Auto scroll: Off"))
+                .addOption('center', t("Auto scroll: Center"))
+                .addOption('cursor', t("Auto scroll: Cursor"))
                 .setValue(this.plugin.settings.autoScrollMode)
                 .onChange(async (value) => {
                     this.plugin.settings.autoScrollMode = value as any;
@@ -150,12 +151,12 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
-            .setName('Highlight mode')
-            .setDesc('Visual tracking granularity')
+            .setName(t("Highlight mode"))
+            .setDesc(t("Highlight mode desc"))
             .addDropdown(dropdown => dropdown
-                .addOption('word', 'Word level')
-                .addOption('sentence', 'Sentence level')
-                .addOption('none', 'None')
+                .addOption('word', t("Highlight mode: Word"))
+                .addOption('sentence', t("Highlight mode: Sentence"))
+                .addOption('none', t("Highlight mode: None"))
                 .setValue(this.plugin.settings.highlightMode)
                 .onChange(async (value) => {
                     this.plugin.settings.highlightMode = value as any;
@@ -163,15 +164,15 @@ export class VoxTrackSettingTab extends PluginSettingTab {
                 }));
 
         new Setting(containerEl)
-            .setName('Highlight color')
-            .setDesc('Color of the active word being read')
+            .setName(t("Highlight color"))
+            .setDesc(t("Highlight color desc"))
             .addDropdown(dropdown => dropdown
-                .addOption('yellow', 'Yellow')
-                .addOption('green', 'Green')
-                .addOption('blue', 'Blue')
-                .addOption('purple', 'Purple')
-                .addOption('red', 'Red')
-                .addOption('none', 'System Default')
+                .addOption('yellow', t("Color: Yellow"))
+                .addOption('green', t("Color: Green"))
+                .addOption('blue', t("Color: Blue"))
+                .addOption('purple', t("Color: Purple"))
+                .addOption('red', t("Color: Red"))
+                .addOption('none', t("Color: Default"))
                 .setValue(this.plugin.settings.highlightColor)
                 .onChange(async (value) => {
                     this.plugin.settings.highlightColor = value;
