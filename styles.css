@@ -13,13 +13,21 @@ VoxTrack Highlight Styles
     box-shadow: 0 0 0 1px var(--voxtrack-highlight-bg);
 }
 
-/* Base variants */
-body.voxtrack-color-yellow { --voxtrack-highlight-bg: rgba(255, 255, 0, 0.4); }
-body.voxtrack-color-green { --voxtrack-highlight-bg: rgba(0, 255, 0, 0.3); }
-body.voxtrack-color-blue { --voxtrack-highlight-bg: rgba(0, 122, 255, 0.3); }
-body.voxtrack-color-purple { --voxtrack-highlight-bg: rgba(163, 0, 255, 0.3); }
-body.voxtrack-color-red { --voxtrack-highlight-bg: rgba(255, 0, 0, 0.3); }
-body.voxtrack-color-none { --voxtrack-highlight-bg: var(--text-selection); }
+/* Base variants - Light Mode */
+.theme-light.voxtrack-color-yellow { --voxtrack-highlight-bg: rgba(255, 255, 0, 0.4); }
+.theme-light.voxtrack-color-green { --voxtrack-highlight-bg: rgba(0, 255, 0, 0.25); }
+.theme-light.voxtrack-color-blue { --voxtrack-highlight-bg: rgba(0, 122, 255, 0.2); }
+.theme-light.voxtrack-color-purple { --voxtrack-highlight-bg: rgba(163, 0, 255, 0.2); }
+.theme-light.voxtrack-color-red { --voxtrack-highlight-bg: rgba(255, 0, 0, 0.2); }
+
+/* Base variants - Dark Mode */
+.theme-dark.voxtrack-color-yellow { --voxtrack-highlight-bg: rgba(255, 215, 0, 0.25); }
+.theme-dark.voxtrack-color-green { --voxtrack-highlight-bg: rgba(50, 205, 50, 0.2); }
+.theme-dark.voxtrack-color-blue { --voxtrack-highlight-bg: rgba(30, 144, 255, 0.25); }
+.theme-dark.voxtrack-color-purple { --voxtrack-highlight-bg: rgba(186, 85, 211, 0.3); }
+.theme-dark.voxtrack-color-red { --voxtrack-highlight-bg: rgba(255, 69, 0, 0.25); }
+
+.voxtrack-color-none { --voxtrack-highlight-bg: var(--text-selection); }
 
 /* Status Bar Styles */
 .status-bar-item.voxtrack-status-bar {
