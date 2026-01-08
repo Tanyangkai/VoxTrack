@@ -28,6 +28,7 @@ export default class VoxTrackPlugin extends Plugin {
 	private currentChunkIndex: number = 0;
 	private chunkOffsets: number[] = [];
 	private audioTimeOffset: number = 0;
+	private chunkScanOffset: number = 0;
 
 	// Status Bar Elements
 	private statusBarItemEl: HTMLElement;
@@ -179,14 +180,36 @@ export default class VoxTrackPlugin extends Plugin {
 							const jsonObj = JSON.parse(jsonStr);
 							const metadata = parseMetadata(jsonObj);
 							if (metadata.length > 0) {
+								const currentChunkText = this.textChunks[this.currentChunkIndex] || '';
+
 								if (this.audioTimeOffset > 0) {
 									for (const m of metadata) {
 										m.offset += this.audioTimeOffset;
 										m.chunkIndex = this.currentChunkIndex;
+
+										// Auto-correct Text Offset
+										if (currentChunkText) {
+											const found = currentChunkText.indexOf(m.text, this.chunkScanOffset);
+											if (found !== -1) {
+												m.textOffset = found;
+												// Advance scan offset, ensuring we don't skip too much if words overlap (unlikely)
+												// Use a safe increment.
+												this.chunkScanOffset = found + 1; 
+											}
+										}
 									}
 								} else {
 									for (const m of metadata) {
 										m.chunkIndex = this.currentChunkIndex;
+										
+										// Auto-correct Text Offset
+										if (currentChunkText) {
+											const found = currentChunkText.indexOf(m.text, this.chunkScanOffset);
+											if (found !== -1) {
+												m.textOffset = found;
+												this.chunkScanOffset = found + 1;
+											}
+										}
 									}
 								}
 								this.syncController.addMetadata(metadata);
@@ -413,6 +436,7 @@ export default class VoxTrackPlugin extends Plugin {
 
 	private async processNextChunk(statusBar: HTMLElement) {
 		this.currentChunkIndex++;
+		this.chunkScanOffset = 0;
 		if (this.currentChunkIndex < this.textChunks.length) {
 			const nextText = this.textChunks[this.currentChunkIndex];
 			if (!nextText) return;
@@ -535,6 +559,7 @@ export default class VoxTrackPlugin extends Plugin {
 			this.hasShownReceivingNotice = false;
 			this.baseOffset = startOffset;
 			this.audioTimeOffset = 0;
+			this.chunkScanOffset = 0;
 
 			this.setupDataHandler(statusBar);
 			await this.socket.connect();
