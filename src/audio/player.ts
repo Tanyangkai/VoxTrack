@@ -2,6 +2,7 @@ export class AudioPlayer {
     private audio: HTMLAudioElement;
     private mediaSource: MediaSource | null = null;
     private sourceBuffer: SourceBuffer | null = null;
+    private objectUrl: string | null = null;
     private queue: Uint8Array[] = [];
     private isPlaying = false;
     private isStopped = false;
@@ -39,19 +40,24 @@ export class AudioPlayer {
         this.isStopped = false;
         return new Promise((resolve) => {
             this.mediaSource = new MediaSource();
-            this.audio.src = URL.createObjectURL(this.mediaSource);
+            this.objectUrl = URL.createObjectURL(this.mediaSource);
+            this.audio.src = this.objectUrl;
 
             this.mediaSource.addEventListener('sourceopen', () => {
                 if (this.isStopped || !this.mediaSource) return;
                 
                 if (!this.sourceBuffer) {
-                    this.sourceBuffer = this.mediaSource.addSourceBuffer('audio/mpeg');
-                    this.sourceBuffer.addEventListener('updateend', () => {
-                        if (!this.isStopped) this.processQueue();
-                    });
-                    this.sourceBuffer.addEventListener('error', (e) => {
-                        console.error('[VoxTrack] SourceBuffer Error', e);
-                    });
+                    try {
+                        this.sourceBuffer = this.mediaSource.addSourceBuffer('audio/mpeg');
+                        this.sourceBuffer.addEventListener('updateend', () => {
+                            if (!this.isStopped) this.processQueue();
+                        });
+                        this.sourceBuffer.addEventListener('error', (e) => {
+                            console.error('[VoxTrack] SourceBuffer Error', e);
+                        });
+                    } catch (e) {
+                        console.error('[VoxTrack] Failed to add SourceBuffer', e);
+                    }
                 }
                 resolve();
             });
@@ -71,10 +77,8 @@ export class AudioPlayer {
                     this.queue.shift();
                 } catch (e: any) {
                     if (e.name === 'QuotaExceededError') {
-                        // Log only once per minute to reduce noise
                         this.cleanupBuffer();
                     } else if (e.name === 'InvalidStateError') {
-                        // SourceBuffer was detached, ignore this task
                         console.debug('[VoxTrack] Append failed due to InvalidState');
                     } else {
                         console.error('[VoxTrack] Append failed', e);
@@ -86,7 +90,7 @@ export class AudioPlayer {
             try {
                 this.mediaSource.endOfStream();
             } catch (e) {
-                console.error('[VoxTrack] EndOfStream failed', e);
+                // Silently fail if stream already ended
             }
         }
     }
@@ -137,6 +141,10 @@ export class AudioPlayer {
         this.isStopped = true;
         this.audio.pause();
         this.audio.removeAttribute('src');
+        if (this.objectUrl) {
+            URL.revokeObjectURL(this.objectUrl);
+            this.objectUrl = null;
+        }
         try {
             this.audio.load(); // Release MediaSource
         } catch (e) {}
@@ -155,6 +163,12 @@ export class AudioPlayer {
         this.sourceBuffer = null;
         this.mediaSource = null;
         this.isInputFinished = false;
+    }
+
+    destroy(): void {
+        this.stop();
+        this.audio.replaceWith(this.audio.cloneNode(true)); // Remove all listeners
+        this.onCompleteCallback = null;
     }
 }
 

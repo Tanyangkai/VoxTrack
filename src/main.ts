@@ -148,6 +148,12 @@ export default class VoxTrackPlugin extends Plugin {
 
 	public async onunload(): Promise<void> {
 		this.stopPlayback();
+		if (this.player) {
+			this.player.destroy();
+		}
+		if (this.statusBarItemEl) {
+			this.statusBarItemEl.remove();
+		}
 	}
 
 	private setupDataHandler(statusBar: HTMLElement) {
@@ -304,31 +310,17 @@ export default class VoxTrackPlugin extends Plugin {
 					if (startIdxInProcessed < currentMap.length) {
 						const rawStart = currentMap[startIdxInProcessed];
 						
-						// Try to find rawEnd. The end index might be mapped, or we might need to look at the next mapped char.
-						// If endIdxInProcessed is out of bounds (end of string), rawEnd is implied?
-						// We can look at map[endIdxInProcessed] if it exists, else map[endIdxInProcessed - 1] + 1?
-						
 						let rawEnd = -1;
 						if (endIdxInProcessed < currentMap.length) {
 							const val = currentMap[endIdxInProcessed];
 							if (val !== undefined) {
 								rawEnd = val;
 							}
-						} else if (currentMap.length > 0) {
-							// End of string, guess based on last char
-							// Note: This might be inaccurate if there are trailing deleted chars, but "word" usually doesn't include them.
-							// Assuming raw chars are contiguous for the word:
-							// We can just calculate length based on content if map fails for end.
 						}
 
 						if (rawStart !== undefined && rawStart !== -1) {
 							const absStart = chunkBaseOffset + rawStart;
 							foundIndex = absStart;
-							
-							// Verify if the text at this location looks vaguely correct (optional, but good for safety)
-							// const potentialMatch = docText.substring(absStart, absStart + 1);
-							// if (potentialMatch.toLowerCase() !== wordToFind[0].toLowerCase()) { ... }
-							// Trust the map for now.
 						}
 					}
 				}
@@ -336,7 +328,6 @@ export default class VoxTrackPlugin extends Plugin {
 				// Fallback 1: Direct search
 				if (foundIndex === -1) {
 					foundIndex = docText.indexOf(wordToFind, currentDocOffset);
-					// if (foundIndex !== -1) console.debug(`[VoxTrack] Map failed, fallback 1 found "${wordToFind}" at ${foundIndex}`);
 				}
 
 				// Fallback 2: Case-insensitive search
@@ -345,7 +336,6 @@ export default class VoxTrackPlugin extends Plugin {
 					const lowerWord = lowerDoc.indexOf(wordToFind.toLowerCase(), currentDocOffset);
 					if (lowerWord !== -1) {
 						foundIndex = lowerWord;
-						// console.debug(`[VoxTrack] Map failed, fallback 2 found "${wordToFind}" at ${foundIndex}`);
 					}
 				}
 
@@ -355,13 +345,11 @@ export default class VoxTrackPlugin extends Plugin {
 					const cleanWord = wordToFind.replace(/[.,;!?。，；！？、]/g, '');
 					if (cleanWord.length > 0 && cleanWord !== wordToFind) {
 						foundIndex = docText.indexOf(cleanWord, currentDocOffset);
-						// if (foundIndex !== -1) console.debug(`[VoxTrack] Map failed, fallback 3 found "${cleanWord}" at ${foundIndex}`);
 						// Try case-insensitive specific clean word
 						if (foundIndex === -1) {
 							const fuzzyIdx = docText.toLowerCase().indexOf(cleanWord.toLowerCase(), currentDocOffset);
 							if (fuzzyIdx !== -1) {
 								foundIndex = fuzzyIdx;
-								// console.debug(`[VoxTrack] Map failed, fallback 3 (fuzzy) found "${cleanWord}" at ${foundIndex}`);
 							}
 						}
 					}

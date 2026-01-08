@@ -43,7 +43,6 @@ export function parseMetadata(data: EdgeResponse): AudioMetadata[] {
     for (const item of data.Metadata) {
         if (item.Type === "WordBoundary" && item.Data) {
             const d = item.Data;
-            // console.debug('[VoxTrack] Raw Metadata:', JSON.stringify(d)); 
 
             // The protocol is inconsistent. Check all known variations.
             const audioOffset = d.Offset ?? d.offset ?? 0;
