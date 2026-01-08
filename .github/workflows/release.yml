@@ -24,17 +24,19 @@ jobs:
         run: npm ci
 
       - name: Build plugin
-        run: npm run build
+        run: |
+          npm run build
+          ls -lh main.js manifest.json styles.css
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
         with:
           name: Release ${{ github.ref_name }}
-          draft: false
-          prerelease: false
           files: |
             main.js
             manifest.json
             styles.css
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
