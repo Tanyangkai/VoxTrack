@@ -49,6 +49,7 @@ export class AudioPlayer {
                 if (!this.sourceBuffer) {
                     try {
                         this.sourceBuffer = this.mediaSource.addSourceBuffer('audio/mpeg');
+                        this.sourceBuffer.mode = 'sequence'; // Critical for stitching TTS chunks
                         this.sourceBuffer.addEventListener('updateend', () => {
                             if (!this.isStopped) this.processQueue();
                         });
@@ -78,7 +79,7 @@ export class AudioPlayer {
                     this.queue.shift();
                 } catch (e) {
                     if (e instanceof Error && e.name === 'QuotaExceededError') {
-                        this.cleanupBuffer();
+                        this.cleanupBuffer(true); // Force cleanup
                     } else if (e instanceof Error && e.name === 'InvalidStateError') {
                         console.debug('[VoxTrack] Append failed due to InvalidState');
                     } else {
@@ -96,24 +97,43 @@ export class AudioPlayer {
         }
     }
 
-    private cleanupBuffer() {
+    private cleanupBuffer(force = false) {
         if (this.isStopped || !this.sourceBuffer || this.sourceBuffer.updating) return;
 
         const currentTime = this.audio.currentTime;
         const buffered = this.sourceBuffer.buffered;
 
-        // Strategy: Keep 10 seconds behind current time if possible, 
-        // but if we are really stuck, allow cleaning up to 2 seconds behind.
+        // Strategy: Keep 10 seconds behind current time if possible.
+        // If force is true (QuotaExceeded), we must remove something.
         let removeEnd = currentTime - 10;
-        if (buffered.length > 0 && removeEnd < buffered.start(0)) {
-            removeEnd = currentTime - 2;
-        }
+        
+        if (buffered.length > 0) {
+             const start = buffered.start(0);
+             if (removeEnd < start) {
+                 removeEnd = currentTime - 2;
+             }
+             
+             // If still invalid or force is needed
+             if (force && removeEnd <= start) {
+                 // Desperate: remove everything already played
+                 removeEnd = currentTime - 0.5;
+             }
 
-        if (buffered.length > 0 && removeEnd > buffered.start(0)) {
-            try {
-                this.sourceBuffer.remove(buffered.start(0), removeEnd);
-            } catch (_e) {
-                console.error('[VoxTrack] Buffer cleanup failed', _e);
+             if (removeEnd > start) {
+                try {
+                    this.sourceBuffer.remove(start, removeEnd);
+                } catch (_e) {
+                    console.error('[VoxTrack] Buffer cleanup failed', _e);
+                    // If cleanup failed, we might be stuck. 
+                    // Try to schedule a retry of processQueue?
+                    setTimeout(() => {
+                        if (!this.sourceBuffer?.updating) this.processQueue();
+                    }, 1000);
+                }
+            } else if (force) {
+                // We couldn't find a safe range to remove, but we are full.
+                // This implies buffer is full of FUTURE data or very small buffer.
+                console.warn('[VoxTrack] Buffer full but cannot remove past data.');
             }
         }
     }
@@ -127,6 +147,13 @@ export class AudioPlayer {
         } catch (e) {
             console.warn('[VoxTrack] Playback pending user interaction', e);
         }
+    }
+
+    getBufferedEnd(): number {
+        if (this.sourceBuffer && this.sourceBuffer.buffered.length > 0) {
+            return this.sourceBuffer.buffered.end(this.sourceBuffer.buffered.length - 1);
+        }
+        return 0;
     }
 
     getCurrentTime(): number {
