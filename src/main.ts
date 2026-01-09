@@ -288,7 +288,7 @@ export default class VoxTrackPlugin extends Plugin {
 							}
 						}
 					} else if (text.includes('Path:turn.end')) {
-						this.audioTimeOffset = this.syncController.getLastEndTime();
+						this.audioTimeOffset = this.player.getBufferedEnd();
 						this.receivingChunkIndex++;
 						await this.processNextChunk(statusBar);
 					}
