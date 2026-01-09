@@ -20,11 +20,22 @@ interface EdgeMetadataTextObject {
     Length?: number;
     length?: number;
     WordLength?: number;
+    BoundaryType?: string;
 }
 
-export interface EdgeMetadataData extends EdgeMetadataTextObject {
+export interface EdgeMetadataData {
     Duration?: number;
     duration?: number;
+    text?: string | EdgeMetadataTextObject;
+    Text?: string | EdgeMetadataTextObject;
+    Offset?: number;
+    offset?: number;
+    TextOffset?: number;
+    textOffset?: number;
+    Word?: string;
+    Length?: number;
+    length?: number;
+    WordLength?: number;
     [key: string]: unknown;
 }
 
@@ -53,17 +64,31 @@ export function parseMetadata(data: EdgeResponse): AudioMetadata[] {
             const audioDuration = d.Duration ?? d.duration ?? 0;
 
             let textObj: EdgeMetadataTextObject;
+            let isFlat = false;
+
             // Check if nested text object exists
             if (d.text && typeof d.text === 'object') {
-                textObj = d.text as EdgeMetadataTextObject;
+                textObj = d.text;
+                isFlat = false;
             } else if (d.Text && typeof d.Text === 'object') {
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                textObj = d.Text as any as EdgeMetadataTextObject; 
+                textObj = d.Text;
+                isFlat = false;
             } else {
-                textObj = d;
+                // If text/Text are strings or undefined, use d itself as the text object
+                isFlat = true;
+                textObj = {
+                    Text: typeof d.Text === 'string' ? d.Text : undefined,
+                    text: typeof d.text === 'string' ? d.text : undefined,
+                    Word: d.Word,
+                    Offset: d.Offset,
+                    offset: d.offset,
+                    TextOffset: d.TextOffset,
+                    textOffset: d.textOffset,
+                    Length: d.Length,
+                    length: d.length,
+                    WordLength: d.WordLength
+                };
             }
-
-            const isFlat = textObj === d;
 
             const word = (textObj.Text ?? textObj.text ?? textObj.Word ?? "") + "";
 

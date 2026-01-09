@@ -1,4 +1,4 @@
-/* eslint-disable obsidianmd/ui/sentence-case */
+
 import { App, PluginSettingTab, Setting, DropdownComponent } from "obsidian";
 import VoxTrackPlugin from "../main";
 import { t } from "../i18n/translations";
@@ -52,21 +52,21 @@ export class VoxTrackSettingTab extends PluginSettingTab {
         new Setting(containerEl)
             .setName(t("Voice role"))
             .setDesc(t("Voice role desc"))
-            .addDropdown((dropdown: DropdownComponent) => 
+            .addDropdown((dropdown: DropdownComponent) =>
                 dropdown
-                .addOption('zh-CN-XiaoxiaoNeural', 'Xiaoxiao (Female, CN)')
-                .addOption('zh-CN-YunxiNeural', 'Yunxi (Male, CN)')
-                .addOption('zh-CN-YunjianNeural', 'Yunjian (Male, CN)')
-                .addOption('zh-HK-HiuMaanNeural', 'HiuMaan (Female, HK)')
-                .addOption('zh-TW-HsiaoChenNeural', 'HsiaoChen (Female, TW)')
-                .addOption('en-US-AvaNeural', 'Ava (Female, US)')
-                .addOption('en-US-AndrewNeural', 'Andrew (Male, US)')
-                .addOption('en-GB-SoniaNeural', 'Sonia (Female, UK)')
-                .setValue(this.plugin.settings.voice)
-                .onChange(async (value) => {
-                    this.plugin.settings.voice = value;
-                    await this.plugin.saveSettings();
-                })
+                    .addOption('zh-CN-XiaoxiaoNeural', 'Xiaoxiao female cn')
+                    .addOption('zh-CN-YunxiNeural', 'Yunxi male cn')
+                    .addOption('zh-CN-YunjianNeural', 'Yunjian male cn')
+                    .addOption('zh-HK-HiuMaanNeural', 'Hiumaan female hk')
+                    .addOption('zh-TW-HsiaoChenNeural', 'Hsiaochen female tw')
+                    .addOption('en-US-AvaNeural', 'Ava female us')
+                    .addOption('en-US-AndrewNeural', 'Andrew male us')
+                    .addOption('en-GB-SoniaNeural', 'Sonia female uk')
+                    .setValue(this.plugin.settings.voice)
+                    .onChange(async (value) => {
+                        this.plugin.settings.voice = value;
+                        await this.plugin.saveSettings();
+                    })
             );
 
         new Setting(containerEl)

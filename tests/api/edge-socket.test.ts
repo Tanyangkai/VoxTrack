@@ -1,13 +1,24 @@
-/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
 import { EdgeSocket } from '../../src/api/edge-socket';
 import { WebSocket } from 'ws';
 
 jest.mock('ws');
 
+interface MockWebSocket {
+    send: jest.Mock;
+    close: jest.Mock;
+    addEventListener: jest.Mock;
+    on: jest.Mock;
+    readyState: number;
+    onopen: (() => void) | null;
+    onmessage: ((ev: { data: unknown; type: string; target: WebSocket }) => void) | null;
+    onerror: ((err: Error) => void) | null;
+    onclose: (() => void) | null;
+    binaryType: string;
+}
+
 describe('EdgeSocket', () => {
     let socket: EdgeSocket;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let mockWsInstance: any;
+    let mockWsInstance: MockWebSocket;
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -54,9 +65,14 @@ describe('EdgeSocket', () => {
         // Wait for async parts (crypto)
         await new Promise(resolve => setTimeout(resolve, 50));
 
-        expect(WebSocket).toHaveBeenCalledWith(
-            expect.stringContaining('wss://'),
-            expect.objectContaining({ headers: expect.any(Object) })
+        expect(WebSocket as unknown as jest.Mock).toHaveBeenCalledWith(
+            expect.stringContaining('wss://') as unknown,
+            expect.objectContaining({
+                headers: expect.objectContaining({
+                    'User-Agent': expect.any(String) as unknown as string,
+                    'Origin': expect.any(String) as unknown as string
+                }) as unknown
+            }) as unknown
         );
 
         // Simulate open event
@@ -66,7 +82,7 @@ describe('EdgeSocket', () => {
 
         await connectPromise;
 
-        expect(mockWsInstance.send).toHaveBeenCalled(); 
+        expect(mockWsInstance.send).toHaveBeenCalled();
     });
 
     test('sendSSML should send correct text message', async () => {

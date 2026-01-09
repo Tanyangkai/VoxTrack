@@ -37,8 +37,7 @@ export class TextProcessor {
             ts.remove(/>\s*\[!.*\][^\n]*\n/); // Callout headers
             ts.remove(/%%[\s\S]*?%%/); // Comments
             ts.remove(/<!--[\s\S]*?-->/); // HTML Comments
-            // eslint-disable-next-line no-useless-escape
-            ts.remove(/<[a-zA-Z\/][^>]*>/); // Generic HTML tags (like <br>, <div>)
+            ts.remove(/<[a-zA-Z/][^>]*>/); // Generic HTML tags (like <br>, <div>)
             ts.remove(/\^[\w-]+/); // Block IDs
         }
 
@@ -62,7 +61,7 @@ export class TextProcessor {
         ts.remove(/!\[\[[^\]]*\]\]/);
 
         // Remove Emoji
-        // eslint-disable-next-line no-misleading-character-class
+        // eslint-disable-next-line no-misleading-character-class -- Emoji ranges are complex and valid here
         ts.remove(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F018}-\u{1F0F5}\u{1F200}-\u{1F270}\u{FE0F}]/u);
 
         // 4. Structure Cleanup

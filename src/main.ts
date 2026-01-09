@@ -14,9 +14,9 @@ import { getSelectedText, getTextFromCursor, getFullText } from './utils/editor-
 import { t } from './i18n/translations';
 
 interface SafeEditor extends Editor {
-    cm?: EditorView;
-    editor?: { cm?: EditorView };
-    view?: EditorView;
+	cm?: EditorView;
+	editor?: { cm?: EditorView };
+	view?: EditorView;
 }
 
 export default class VoxTrackPlugin extends Plugin {
@@ -189,110 +189,110 @@ export default class VoxTrackPlugin extends Plugin {
 	private setupDataHandler(statusBar: HTMLElement) {
 		this.socket.onMessage((data) => {
 			void (async () => {
-			let buffer: Uint8Array;
-			if (typeof data === 'string') {
-				buffer = new TextEncoder().encode(data);
-			} else if (data instanceof Uint8Array) {
-				buffer = data;
-			} else {
-				buffer = new Uint8Array(data as ArrayBuffer);
-			}
-
-			if (buffer.length > 2 && buffer[0] === 0x00) {
-				const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
-				const headerLength = view.getInt16(0, false);
-				const audioData = buffer.subarray(headerLength + 2);
-				if (audioData.length > 0) {
-					if (!this.hasShownReceivingNotice && this.player.getCurrentTime() === 0) {
-						new Notice(t("Status: Receiving"));
-						this.hasShownReceivingNotice = true;
-					}
-					this.player.addChunk(new Uint8Array(audioData));
-
-					// Only auto-play if we are logically "playing" and NOT "paused"
-					if (this.isPlaying && !this.isPaused) {
-						void this.player.play().catch(() => { });
-					}
+				await Promise.resolve(); // Ensure async function has an await expression
+				let buffer: Uint8Array;
+				if (typeof data === 'string') {
+					buffer = new TextEncoder().encode(data);
+				} else if (data instanceof Uint8Array) {
+					buffer = data;
+				} else {
+					buffer = new Uint8Array(data as ArrayBuffer);
 				}
-			} else {
-				const text = new TextDecoder('utf-8').decode(buffer);
-				if (text.includes('Path:audio.metadata')) {
-					const jsonStart = text.indexOf('\r\n\r\n');
-					if (jsonStart !== -1) {
-						try {
-							const jsonStr = text.substring(jsonStart + 4);
-							// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-							const jsonObj = JSON.parse(jsonStr);
-							const metadata = parseMetadata(jsonObj as EdgeResponse);
-							if (metadata.length > 0) {
-								const targetChunkIndex = this.receivingChunkIndex;
-								const currentChunkText = this.textChunks[targetChunkIndex] || '';
 
-								for (const m of metadata) {
-									if (this.audioTimeOffset > 0) {
-										m.offset += this.audioTimeOffset;
-									}
-									m.chunkIndex = targetChunkIndex;
+				if (buffer.length > 2 && buffer[0] === 0x00) {
+					const view = new DataView(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+					const headerLength = view.getInt16(0, false);
+					const audioData = buffer.subarray(headerLength + 2);
+					if (audioData.length > 0) {
+						if (!this.hasShownReceivingNotice && this.player.getCurrentTime() === 0) {
+							new Notice(t("Status: Receiving"));
+							this.hasShownReceivingNotice = true;
+						}
+						this.player.addChunk(new Uint8Array(audioData));
 
-									// NEW: Aggressively filter out SSML tags and fragments that Edge TTS erroneously returns
-									const rawText = m.text.toLowerCase();
-									if (/[<>]/.test(rawText) ||
-										/^(prosody|voice|speak|speak|audio|mstts|phoneme|break|emphasis|say-as|sub|p|s|v|i|ce|od|os|pr|r)$/.test(rawText) ||
-										/^(gt|lt|amp|quot|apos|nbsp|;)$/.test(rawText) ||
-										/^&[a-z]+;?$/.test(rawText) ||
-										/^[/\\]/.test(rawText)) {
-										continue;
-									}
+						// Only auto-play if we are logically "playing" and NOT "paused"
+						if (this.isPlaying && !this.isPaused) {
+							await this.player.play().catch(() => { });
+						}
+					}
+				} else {
+					const text = new TextDecoder('utf-8').decode(buffer);
+					if (text.includes('Path:audio.metadata')) {
+						const jsonStart = text.indexOf('\r\n\r\n');
+						if (jsonStart !== -1) {
+							try {
+								const jsonStr = text.substring(jsonStart + 4);
+								const jsonObj = JSON.parse(jsonStr) as unknown as EdgeResponse;
+								const metadata = parseMetadata(jsonObj);
+								if (metadata.length > 0) {
+									const targetChunkIndex = this.receivingChunkIndex;
+									const currentChunkText = this.textChunks[targetChunkIndex] || '';
 
-									// Auto-correct Text Offset
-									if (currentChunkText) {
-										const searchText = this.unescapeHtml(m.text);
+									for (const m of metadata) {
+										if (this.audioTimeOffset > 0) {
+											m.offset += this.audioTimeOffset;
+										}
+										m.chunkIndex = targetChunkIndex;
 
-										// Limit search window to prevent jumping to distant matches (noise reduction)
-										const searchWindow = 300;
-										let found = currentChunkText.indexOf(searchText, this.chunkScanOffset);
-
-										if (found !== -1 && found > this.chunkScanOffset + searchWindow) {
-											found = -1;
+										// NEW: Aggressively filter out SSML tags and fragments that Edge TTS erroneously returns
+										const rawText = m.text.toLowerCase();
+										if (/[<>]/.test(rawText) ||
+											/^(prosody|voice|speak|speak|audio|mstts|phoneme|break|emphasis|say-as|sub|p|s|v|i|ce|od|os|pr|r)$/.test(rawText) ||
+											/^(gt|lt|amp|quot|apos|nbsp|;)$/.test(rawText) ||
+											/^&[a-z]+;?$/.test(rawText) ||
+											/^[/\\]/.test(rawText)) {
+											continue;
 										}
 
-										if (found === -1) {
-											const cleanSearch = searchText.replace(/[.,;!?。，；！？、]/g, '');
-											if (cleanSearch.length > 0) {
-												found = currentChunkText.indexOf(cleanSearch, this.chunkScanOffset);
-												if (found !== -1 && found > this.chunkScanOffset + searchWindow) {
-													found = -1;
+										// Auto-correct Text Offset
+										if (currentChunkText) {
+											const searchText = this.unescapeHtml(m.text);
+
+											// Limit search window to prevent jumping to distant matches (noise reduction)
+											const searchWindow = 300;
+											let found = currentChunkText.indexOf(searchText, this.chunkScanOffset);
+
+											if (found !== -1 && found > this.chunkScanOffset + searchWindow) {
+												found = -1;
+											}
+
+											if (found === -1) {
+												const cleanSearch = searchText.replace(/[.,;!?。，；！？、]/g, '');
+												if (cleanSearch.length > 0) {
+													found = currentChunkText.indexOf(cleanSearch, this.chunkScanOffset);
+													if (found !== -1 && found > this.chunkScanOffset + searchWindow) {
+														found = -1;
+													}
+												}
+											}
+
+											if (found !== -1) {
+												// Ignore suspicious single-letter jumps (likely TTS garbage tokens)
+												const isSingleLetter = searchText.length === 1 && /[a-zA-Z]/.test(searchText);
+												if (isSingleLetter && found > this.chunkScanOffset + 20) {
+													// Skip this token
+												} else {
+													const expanded = this.expandWordSelection(currentChunkText, found, searchText.length);
+													m.textOffset = expanded.start;
+													m.wordLength = expanded.length;
+													m.text = currentChunkText.substring(expanded.start, expanded.start + expanded.length);
+													this.chunkScanOffset = found + 1;
 												}
 											}
 										}
-
-										if (found !== -1) {
-											// Ignore suspicious single-letter jumps (likely TTS garbage tokens)
-											const isSingleLetter = searchText.length === 1 && /[a-zA-Z]/.test(searchText);
-											if (isSingleLetter && found > this.chunkScanOffset + 20) {
-												// Skip this token
-											} else {
-												const expanded = this.expandWordSelection(currentChunkText, found, searchText.length);
-												m.textOffset = expanded.start;
-												m.wordLength = expanded.length;
-												m.text = currentChunkText.substring(expanded.start, expanded.start + expanded.length);
-												this.chunkScanOffset = found + 1;
-											}
-										}
 									}
+									this.syncController.addMetadata(metadata);
 								}
-								this.syncController.addMetadata(metadata);
+							} catch (e) {
+								console.warn('[VoxTrack] Metadata parse error', e);
 							}
-						} catch (e) {
-							console.warn('[VoxTrack] Metadata parse error', e);
 						}
+					} else if (text.includes('Path:turn.end')) {
+						this.audioTimeOffset = this.syncController.getLastEndTime();
+						this.receivingChunkIndex++;
+						await this.processNextChunk(statusBar);
 					}
-				} else if (text.includes('Path:turn.end')) {
-					this.audioTimeOffset = this.syncController.getLastEndTime();
-					this.receivingChunkIndex++;
-					void this.processNextChunk(statusBar);
 				}
-			}
 			})();
 		});
 
@@ -768,9 +768,7 @@ export default class VoxTrackPlugin extends Plugin {
 	}
 
 	public async loadSettings(): Promise<void> {
-		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-		const data = await this.loadData();
-		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+		const data = (await this.loadData()) as unknown as VoxTrackSettings;
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, data);
 
 		// Migration: autoScroll (boolean) -> autoScrollMode (string)

@@ -1,11 +1,10 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
-import { parseMetadata } from '../../src/api/protocol';
+import { parseMetadata, EdgeResponse } from '../../src/api/protocol';
 
 describe('Protocol Layer', () => {
     describe('parseMetadata', () => {
         it('should parse valid Edge TTS WordBoundary event', () => {
             // Mock raw data from Edge TTS
-            const rawData = {
+            const rawData: EdgeResponse = {
                 Metadata: [
                     {
                         Type: "WordBoundary",
@@ -22,9 +21,7 @@ describe('Protocol Layer', () => {
                 ]
             };
 
-            // Assuming parseMetadata returns an array of metadata
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const result = parseMetadata(rawData as any);
+            const result = parseMetadata(rawData);
             expect(result).toHaveLength(1);
             expect(result[0]).toMatchObject({
                 offset: 1230000,
@@ -35,7 +32,7 @@ describe('Protocol Layer', () => {
         });
 
         it('should parse Flat Edge TTS metadata structure correctly', () => {
-            const rawData = {
+            const rawData: EdgeResponse = {
                 Metadata: [
                     {
                         Type: "WordBoundary",
@@ -50,8 +47,7 @@ describe('Protocol Layer', () => {
                 ]
             };
 
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const result = parseMetadata(rawData as any);
+            const result = parseMetadata(rawData);
             expect(result).toHaveLength(1);
             expect(result[0]).toMatchObject({
                 offset: 9999999,
@@ -63,7 +59,7 @@ describe('Protocol Layer', () => {
         });
 
         it('should handle camelCase textOffset in Flat structure', () => {
-            const rawData = {
+            const rawData: EdgeResponse = {
                 Metadata: [
                     {
                         Type: "WordBoundary",
@@ -83,9 +79,8 @@ describe('Protocol Layer', () => {
             // textObj = d.
             // isFlat = true.
             // textOffset = d.TextOffset ?? d.textOffset
-            
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const result = parseMetadata(rawData as any);
+
+            const result = parseMetadata(rawData);
             expect(result).toHaveLength(1);
             if (result[0]) {
                 expect(result[0].textOffset).toBe(15);
@@ -93,7 +88,7 @@ describe('Protocol Layer', () => {
         });
 
         it('should return empty array for irrelevant events', () => {
-            const rawData = {
+            const rawData: EdgeResponse = {
                 Metadata: [
                     {
                         Type: "SessionEnd",
@@ -101,8 +96,7 @@ describe('Protocol Layer', () => {
                     }
                 ]
             };
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const result = parseMetadata(rawData as any);
+            const result = parseMetadata(rawData);
             expect(result).toEqual([]);
         });
     });

@@ -62,13 +62,13 @@ export class EdgeSocket {
                         resolve();
                     };
 
-                    this.ws.onmessage = (ev: { data: unknown; type: string; target: WebSocket }) => {
+                    this.ws.onmessage = (ev: { data: string | ArrayBuffer; type: string; target: WebSocket }) => {
                         if (this.onMessageCallback) {
                             let data: string | Uint8Array;
                             if (typeof ev.data === 'string') {
                                 data = ev.data;
                             } else {
-                                data = new Uint8Array(ev.data as ArrayBuffer);
+                                data = new Uint8Array(ev.data);
                             }
                             this.onMessageCallback(data);
                         }
