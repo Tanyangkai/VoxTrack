@@ -701,7 +701,6 @@ export default class VoxTrackPlugin extends Plugin {
 
 	private async processNextChunk(statusBar: HTMLElement) {
 		this.currentChunkIndex++;
-		this.chunkScanOffset = 0;
 		this.chunkTruncationOffset = 0;
 		this.recoveryTimeOffset = 0;
 		this.lastProcessedTextIndex = 0;
@@ -753,7 +752,7 @@ export default class VoxTrackPlugin extends Plugin {
 		}
 	}
 
-	private async recoverConnection(statusBar: HTMLElement) {
+	private async recoverConnection(statusBar?: HTMLElement) {
 		if (this.isRecovering) return;
 		this.isRecovering = true;
 
@@ -813,7 +812,7 @@ export default class VoxTrackPlugin extends Plugin {
 				
 				// Find terminators
 				for (let i = lookbackText.length - 1; i >= 0; i--) {
-					const char = lookbackText[i];
+					const char = lookbackText[i]!;
 					// STRICTER CHECK: Terminator must be followed by whitespace or end of string (conceptually)
 					// to avoid splitting abbreviations like "node.js" or "v1.0".
 					// Since lookbackText ends at scanStart, we check characters relative to i inside lookbackText
@@ -824,7 +823,7 @@ export default class VoxTrackPlugin extends Plugin {
 
 					if (terminators.test(char)) {
 						// Only treat as terminator if followed by whitespace/newline or if it's the end of text
-						if (!charAfter || /\s/.test(charAfter)) {
+						if (!charAfter || /\s/.test(charAfter || '')) {
 							lastTerminator = i;
 							break;
 						}
@@ -833,7 +832,7 @@ export default class VoxTrackPlugin extends Plugin {
 						// Secondary terminators (comma) logic can remain simpler or also check whitespace?
 						// Let's keep it simple for now or apply same logic?
 						// Usually comma followed by space.
-						if (!charAfter || /\s/.test(charAfter)) {
+						if (!charAfter || /\s/.test(charAfter || '')) {
 							lastSecondaryTerminator = i;
 						}
 					}
@@ -1025,7 +1024,7 @@ export default class VoxTrackPlugin extends Plugin {
 			// We look for the first character in the chunk that maps to a position >= cursorTargetOffset
 			let sliceIndex = -1;
 			for (let i = 0; i < chunk.map.length; i++) {
-				if (chunk.map[i] >= cursorTargetOffset) {
+				if (chunk.map[i]! >= cursorTargetOffset) {
 					sliceIndex = i;
 					foundStart = true;
 					break;
@@ -1085,8 +1084,11 @@ export default class VoxTrackPlugin extends Plugin {
 				return;
 			}
 
-			if (this.textChunks.length > 0 && this.textChunks[0]) {
-				await this.sendChunk(this.textChunks[0], statusBar);
+			if (this.textChunks.length > 0) {
+				const firstChunk = this.textChunks[0];
+				if (firstChunk) {
+					await this.sendChunk(firstChunk, statusBar);
+				}
 			}
 
 			if (!this.isPlaying) return; // Check again

@@ -157,7 +157,8 @@ export class SyncController {
         // Find the latest item that starts before currentTicks
         while (left <= right) {
             const mid = Math.floor((left + right) / 2);
-            if (this.metadata[mid].offset <= currentTicks) {
+            const midItem = this.metadata[mid];
+            if (midItem && midItem.offset <= currentTicks) {
                 bestIdx = mid;
                 left = mid + 1;
             } else {
@@ -166,7 +167,7 @@ export class SyncController {
         }
 
         if (bestIdx !== -1) {
-            return this.metadata[bestIdx];
+            return this.metadata[bestIdx] || null;
         }
         return null; // Should usually not happen if time > 0 and metadata exists
     }

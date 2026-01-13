@@ -54,7 +54,7 @@ export class TrackedString {
                 newText += this.text.substring(lastCursor, m.index);
                 // Copy map segment
                 for (let i = lastCursor; i < m.index; i++) {
-                    newMap.push(this.map[i]);
+                    newMap.push(this.map[i]!);
                 }
             }
 
@@ -70,11 +70,10 @@ export class TrackedString {
             lastCursor = m.index + m.length;
         }
 
-        // 3. Copy remaining tail
         if (lastCursor < this.text.length) {
             newText += this.text.substring(lastCursor);
             for (let i = lastCursor; i < this.text.length; i++) {
-                newMap.push(this.map[i]);
+                newMap.push(this.map[i]!);
             }
         }
 
@@ -145,7 +144,7 @@ export class TrackedString {
             if (m.index > lastCursor) {
                 newText += this.text.substring(lastCursor, m.index);
                 for (let i = lastCursor; i < m.index; i++) {
-                    newMap.push(this.map[i]);
+                    newMap.push(this.map[i]!);
                 }
             }
 
@@ -153,7 +152,7 @@ export class TrackedString {
             newText += m.group1;
             // Map for group1 comes from the original map at group1Index
             for (let k = 0; k < m.group1.length; k++) {
-                newMap.push(this.map[m.group1Index + k]);
+                newMap.push(this.map[m.group1Index + k]!);
             }
 
             lastCursor = m.index + m.length;
@@ -163,7 +162,7 @@ export class TrackedString {
         if (lastCursor < this.text.length) {
             newText += this.text.substring(lastCursor);
             for (let i = lastCursor; i < this.text.length; i++) {
-                newMap.push(this.map[i]);
+                newMap.push(this.map[i]!);
             }
         }
 
