@@ -8,10 +8,13 @@ import { SyncController } from './sync/controller';
 import { EdgeSocket } from './api/edge-socket';
 import { voxTrackExtensions } from './editor/extensions';
 import { setActiveRange } from './editor/decorations';
-import { parseMetadata, EdgeResponse, AudioMetadata } from './api/protocol';
+import { parseMetadata, EdgeResponse, AudioMetadata, isJunkMetadata } from './api/protocol';
 import { TextProcessor } from './text-processor';
 import { getSelectedText, getTextFromCursor, getFullText } from './utils/editor-utils';
+import { findWordIndexInDoc, fuzzyIndexOf } from './utils/sync-utils';
+import { SessionManager } from './utils/session-utils';
 import { t } from './i18n/translations';
+import { FileLogger } from './utils/logger';
 
 interface SafeEditor extends Editor {
 	cm?: EditorView;
@@ -38,9 +41,12 @@ export default class VoxTrackPlugin extends Plugin {
 	private currentChunkIndex: number = 0;
 	private chunkOffsets: number[] = [];
 	private audioTimeOffset: number = 0;
-	private chunkScanOffset: number = 0;
+	private chunkScanOffsets: number[] = []; // Per-chunk scan offsets
+	private requestToChunkMap: Map<string, number> = new Map(); // Map X-RequestId to chunkIndex
 	private lastHighlightFrom: number = -1;
 	private lastHighlightTo: number = -1;
+	private sessionManager: SessionManager = new SessionManager();
+	private currentDocOffset: number = 0; // Tracks document offset for highlight search optimization
 
 	// Status Bar Elements
 	private statusBarItemEl: HTMLElement;
@@ -50,10 +56,20 @@ export default class VoxTrackPlugin extends Plugin {
 	private statusBarLocateBtn: HTMLElement;
 
 	private receivingChunkIndex: number = 0;
+	private isReceivingData: boolean = false;
+	private isRecovering: boolean = false;
+	private retryCount: number = 0;
+	private readonly MAX_RETRIES = 3;
+	private lastProcessedTextIndex: number = 0;
+	private chunkTruncationOffset: number = 0;
+	private recoveryTimeOffset: number = 0; // Additional time offset for recovered chunks
 
 	public async onload(): Promise<void> {
 		await this.loadSettings();
 		this.applyHighlightColor();
+
+		FileLogger.initialize(this.app);
+		void FileLogger.log('Plugin loaded');
 
 		this.player = new AudioPlayer();
 		this.syncController = new SyncController();
@@ -75,12 +91,12 @@ export default class VoxTrackPlugin extends Plugin {
 		this.statusBarPlayBtn.onclick = () => {
 			if (this.isPlaying && this.activeEditor) {
 				// If playing, just toggle
-				void this.togglePlay(this.activeEditor, 'auto', this.statusBarItemEl).catch(console.error);
+				void this.togglePlay(this.activeEditor, 'auto', this.statusBarItemEl).catch(e => FileLogger.error('Toggle Play Error', e));
 			} else {
 				// If not playing, find active view
 				const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
 				if (activeView) {
-					void this.togglePlay(activeView.editor, 'auto', this.statusBarItemEl).catch(console.error);
+					void this.togglePlay(activeView.editor, 'auto', this.statusBarItemEl).catch(e => FileLogger.error('Toggle Play Error', e));
 				} else {
 					new Notice(t("Notice: No editor"));
 				}
@@ -110,7 +126,7 @@ export default class VoxTrackPlugin extends Plugin {
 		this.addRibbonIcon('play-circle', 'VoxTrack: ' + t("Command: Play/pause"), (evt: MouseEvent) => {
 			const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
 			if (activeView) {
-				void this.togglePlay(activeView.editor, 'auto', this.statusBarItemEl).catch(console.error);
+				void this.togglePlay(activeView.editor, 'auto', this.statusBarItemEl).catch(e => FileLogger.error('Toggle Play Error', e));
 			} else {
 				// Try to stop if no active editor but maybe global playing? 
 				// For now just match command logic which requires editor usually, 
@@ -128,12 +144,13 @@ export default class VoxTrackPlugin extends Plugin {
 		this.addCommand({
 			id: 'play',
 			name: t("Command: Play/pause"),
+			hotkeys: [{ modifiers: ["Mod", "Shift"], key: "p" }],
 			editorCallback: (editor: Editor) => {
 				void (async () => {
 					try {
 						await this.togglePlay(editor, 'auto', this.statusBarItemEl);
 					} catch (e) {
-						console.error(e);
+						void FileLogger.error('Command Error', e);
 					}
 				})();
 			}
@@ -142,12 +159,13 @@ export default class VoxTrackPlugin extends Plugin {
 		this.addCommand({
 			id: 'read-from-cursor',
 			name: t("Command: Read from cursor"),
+			hotkeys: [{ modifiers: ["Mod", "Shift"], key: "r" }],
 			editorCallback: (editor: Editor) => {
 				void (async () => {
 					try {
 						await this.togglePlay(editor, 'cursor', this.statusBarItemEl);
 					} catch (e) {
-						console.error(e);
+						void FileLogger.error('Command Error', e);
 					}
 				})();
 			}
@@ -156,8 +174,18 @@ export default class VoxTrackPlugin extends Plugin {
 		this.addCommand({
 			id: 'stop',
 			name: t("Command: Stop"),
+			hotkeys: [{ modifiers: ["Mod", "Shift"], key: "s" }],
 			editorCallback: () => {
 				this.stopPlayback(this.statusBarItemEl);
+			}
+		});
+
+		this.addCommand({
+			id: 'locate',
+			name: t("Tooltip: Locate"),
+			hotkeys: [{ modifiers: ["Mod", "Shift"], key: "l" }],
+			callback: () => {
+				this.scrollToActive();
 			}
 		});
 
@@ -187,8 +215,18 @@ export default class VoxTrackPlugin extends Plugin {
 	}
 
 	private setupDataHandler(statusBar: HTMLElement) {
+		if (this.syncInterval) {
+			cancelAnimationFrame(this.syncInterval);
+			this.syncInterval = null;
+		}
+
+		const sessionId = uuidv4();
+		this.sessionManager.startNewSession(sessionId);
+
 		this.socket.onMessage((data) => {
 			void (async () => {
+				if (!this.sessionManager.isValid(sessionId)) return;
+
 				await Promise.resolve(); // Ensure async function has an await expression
 				let buffer: Uint8Array;
 				if (typeof data === 'string') {
@@ -221,46 +259,54 @@ export default class VoxTrackPlugin extends Plugin {
 						const jsonStart = text.indexOf('\r\n\r\n');
 						if (jsonStart !== -1) {
 							try {
+								// Extract RequestId from headers
+								let targetChunkIndex = this.receivingChunkIndex;
+								const requestIdMatch = text.match(/X-RequestId:([a-f0-9]+)/i);
+								if (requestIdMatch && requestIdMatch[1]) {
+									const mappedIndex = this.requestToChunkMap.get(requestIdMatch[1]);
+									if (mappedIndex !== undefined) {
+										targetChunkIndex = mappedIndex;
+									} else {
+										// FileLogger.debug('Metadata: No mapping for RequestId', { id: requestIdMatch[1] });
+									}
+								} else {
+									// FileLogger.debug('Metadata: No RequestId in message');
+								}
+
 								const jsonStr = text.substring(jsonStart + 4);
 								const jsonObj = JSON.parse(jsonStr) as unknown as EdgeResponse;
-								const metadata = parseMetadata(jsonObj);
-								if (metadata.length > 0) {
-									const targetChunkIndex = this.receivingChunkIndex;
+								const rawMetadata = parseMetadata(jsonObj);
+
+								if (rawMetadata.length > 0) {
 									const currentChunkText = this.textChunks[targetChunkIndex] || '';
 
-									for (const m of metadata) {
-										if (this.audioTimeOffset > 0) {
-											m.offset += this.audioTimeOffset;
+									// NEW: Aggressively filter out SSML tags and fragments that Edge TTS erroneously returns
+									const validMetadata = rawMetadata.filter(m => !isJunkMetadata(m.text));
+
+									for (const m of validMetadata) {
+										if (this.audioTimeOffset > 0 || this.recoveryTimeOffset > 0) {
+											m.offset += (this.audioTimeOffset + this.recoveryTimeOffset) * 10000000;
 										}
 										m.chunkIndex = targetChunkIndex;
-
-										// NEW: Aggressively filter out SSML tags and fragments that Edge TTS erroneously returns
-										const rawText = m.text.toLowerCase();
-										if (/[<>]/.test(rawText) ||
-											/^(prosody|voice|speak|speak|audio|mstts|phoneme|break|emphasis|say-as|sub|p|s|v|i|ce|od|os|pr|r)$/.test(rawText) ||
-											/^(gt|lt|amp|quot|apos|nbsp|;)$/.test(rawText) ||
-											/^&[a-z]+;?$/.test(rawText) ||
-											/^[/\\]/.test(rawText)) {
-											continue;
-										}
 
 										// Auto-correct Text Offset
 										if (currentChunkText) {
 											const searchText = this.unescapeHtml(m.text);
+											let scanOffset = this.chunkScanOffsets[targetChunkIndex] || 0;
 
 											// Limit search window to prevent jumping to distant matches (noise reduction)
 											const searchWindow = 300;
-											let found = currentChunkText.indexOf(searchText, this.chunkScanOffset);
+											let found = currentChunkText.indexOf(searchText, scanOffset);
 
-											if (found !== -1 && found > this.chunkScanOffset + searchWindow) {
+											if (found !== -1 && found > scanOffset + searchWindow) {
 												found = -1;
 											}
 
 											if (found === -1) {
 												const cleanSearch = searchText.replace(/[.,;!?。，；！？、]/g, '');
 												if (cleanSearch.length > 0) {
-													found = currentChunkText.indexOf(cleanSearch, this.chunkScanOffset);
-													if (found !== -1 && found > this.chunkScanOffset + searchWindow) {
+													found = currentChunkText.indexOf(cleanSearch, scanOffset);
+													if (found !== -1 && found > scanOffset + searchWindow) {
 														found = -1;
 													}
 												}
@@ -269,26 +315,37 @@ export default class VoxTrackPlugin extends Plugin {
 											if (found !== -1) {
 												// Ignore suspicious single-letter jumps (likely TTS garbage tokens)
 												const isSingleLetter = searchText.length === 1 && /[a-zA-Z]/.test(searchText);
-												if (isSingleLetter && found > this.chunkScanOffset + 20) {
+												if (isSingleLetter && found > scanOffset + 20) {
 													// Skip this token
 												} else {
 													const expanded = this.expandWordSelection(currentChunkText, found, searchText.length);
 													m.textOffset = expanded.start;
 													m.wordLength = expanded.length;
 													m.text = currentChunkText.substring(expanded.start, expanded.start + expanded.length);
-													this.chunkScanOffset = found + 1;
+													this.chunkScanOffsets[targetChunkIndex] = found + 1;
 												}
 											}
 										}
 									}
-									this.syncController.addMetadata(metadata);
+									this.syncController.addMetadata(validMetadata);
 								}
 							} catch (e) {
-								console.warn('[VoxTrack] Metadata parse error', e);
+								void FileLogger.warn('Metadata parse error', e);
 							}
 						}
 					} else if (text.includes('Path:turn.end')) {
-						this.audioTimeOffset = this.player.getBufferedEnd();
+						this.isReceivingData = false;
+						// Wait for all audio data to be buffered to ensure accurate duration calculation
+						// This fixes race condition where 'turn.end' arrives before silence is buffered
+						await this.player.waitForQueueEmpty();
+
+						// Calculate offset for next chunk
+						const bufferedEnd = this.player.getBufferedEnd();
+						const lastMetadataEnd = this.syncController.getLastEndTime() / 10000000; // Convert ticks to seconds
+
+						// Use the maximum to ensure no overlap if metadata extends past buffer
+						this.audioTimeOffset = Math.max(bufferedEnd, lastMetadataEnd);
+
 						this.receivingChunkIndex++;
 						await this.processNextChunk(statusBar);
 					}
@@ -296,30 +353,46 @@ export default class VoxTrackPlugin extends Plugin {
 			})();
 		});
 
-		this.socket.onClose(() => {
+		this.socket.onClose((code, reason) => {
+			if (!this.sessionManager.isValid(sessionId)) return;
 			if (this.isPlaying) {
 				if (this.isTransferFinished) {
 					// No log
+				} else if (!this.isReceivingData) {
+					void FileLogger.log(`Socket closed while idle (Code: ${code}). Will reconnect on next request.`);
+					// Do not stop playback. Auto-reconnect in sendChunk will handle next request.
 				} else {
-					console.warn('[VoxTrack] Socket closed unexpectedly');
-					new Notice(t("Notice: Connection lost"));
-					this.stopPlayback(statusBar);
+					void FileLogger.warn(`Socket closed unexpectedly during data transfer. Code: ${code}, Reason: ${reason}`);
+					void this.recoverConnection(statusBar);
 				}
 			}
 		});
 
 		let lastActive: AudioMetadata | null = null;
-		let currentDocOffset = 0;
+		// Removed local currentDocOffset
 
 		const updateLoop = () => {
+			if (!this.sessionManager.isValid(sessionId)) {
+				// Self-terminate old loop
+				return;
+			}
 			if (!this.isPlaying) return;
 
 			const time = this.player.getCurrentTime();
 			const active = this.syncController.findActiveMetadata(time);
 
+			if (active && active !== lastActive) {
+				// FileLogger.debug('New Active Metadata', {
+				// 	time,
+				// 	text: active.text,
+				// 	offset: active.offset,
+				// 	chunk: active.chunkIndex
+				// });
+			}
+
 			if (active && active !== lastActive && this.activeEditor) {
 				if (lastActive === null || active.offset < lastActive.offset) {
-					currentDocOffset = this.baseOffset;
+					this.currentDocOffset = this.baseOffset;
 				}
 				lastActive = active;
 
@@ -329,16 +402,46 @@ export default class VoxTrackPlugin extends Plugin {
 
 				// 1. Try Precise Map Lookup
 				// Use the chunkIndex stored in metadata to find the correct map
-				const mapIndex = active.chunkIndex !== undefined ? active.chunkIndex : this.currentChunkIndex;
+				const mapIndex = active.chunkIndex;
+				if (mapIndex === undefined) return; // Must have chunk info for reliable sync
+
 				const currentMap = this.chunkMaps[mapIndex];
 				const chunkBaseOffset = this.chunkOffsets[mapIndex] || 0;
 
-				if (currentMap && active.textOffset !== undefined) {
+				// Calculate the actual start of this chunk in the document
+				let chunkActualStart = chunkBaseOffset;
+				if (currentMap && currentMap.length > 0) {
+					const firstCharOffset = currentMap[0];
+					if (firstCharOffset !== undefined) {
+						chunkActualStart = chunkBaseOffset + firstCharOffset;
+					}
+				}
+
+				let startIdxInProcessed = active.textOffset;
+
+				// Fallback: If textOffset is missing (or undefined), try to find the word in the processed chunk
+				// using our local tracking index to handle long chunks where global search window fails.
+				if (startIdxInProcessed === undefined && currentMap) {
+					const chunkText = this.textChunks[mapIndex];
+					if (chunkText) {
+						// Use fuzzyIndexOf to match even if there are extra spaces in processed text (e.g. from punctuation replacement)
+						const found = fuzzyIndexOf(chunkText, active.text, this.lastProcessedTextIndex);
+						if (found !== -1) {
+							// Basic sanity check: prevent jumping too far ahead? 
+							// For now trust sequential playback.
+							startIdxInProcessed = found;
+						}
+					}
+				}
+
+				if (currentMap && startIdxInProcessed !== undefined) {
 					// active.textOffset is index in the processed chunk
 					// active.wordLength is length in processed chunk
 
-					const startIdxInProcessed = active.textOffset;
-					const endIdxInProcessed = active.textOffset + active.wordLength;
+					// Update local tracker
+					this.lastProcessedTextIndex = startIdxInProcessed;
+
+					const endIdxInProcessed = startIdxInProcessed + active.wordLength;
 
 					if (startIdxInProcessed < currentMap.length) {
 						const rawStart = currentMap[startIdxInProcessed];
@@ -354,96 +457,117 @@ export default class VoxTrackPlugin extends Plugin {
 						if (rawStart !== undefined && rawStart !== -1) {
 							const absStart = chunkBaseOffset + rawStart;
 							foundIndex = absStart;
-						}
-					}
-				}
 
-				// Fallback 1: Direct search
-				if (foundIndex === -1) {
-					foundIndex = docText.indexOf(wordToFind, currentDocOffset);
-				}
-
-				// Fallback 2: Case-insensitive search
-				if (foundIndex === -1) {
-					const lowerDoc = docText.toLowerCase();
-					const lowerWord = lowerDoc.indexOf(wordToFind.toLowerCase(), currentDocOffset);
-					if (lowerWord !== -1) {
-						foundIndex = lowerWord;
-					}
-				}
-
-				// Fallback 3: Fuzzy search (strip punctuation from wordToFind)
-				// TTS sometimes adds punctuation like commas or periods that aren't in source
-				if (foundIndex === -1) {
-					const cleanWord = wordToFind.replace(/[.,;!?。，；！？、]/g, '');
-					if (cleanWord.length > 0 && cleanWord !== wordToFind) {
-						foundIndex = docText.indexOf(cleanWord, currentDocOffset);
-						// Try case-insensitive specific clean word
-						if (foundIndex === -1) {
-							const fuzzyIdx = docText.toLowerCase().indexOf(cleanWord.toLowerCase(), currentDocOffset);
-							if (fuzzyIdx !== -1) {
-								foundIndex = fuzzyIdx;
-							}
-						}
-					}
-				}
-
-				// Fallback 4: Overshot Recovery
-				// If we can't find it forward, check if we skipped it (foundIndex would be < currentDocOffset but > baseOffset)
-				if (foundIndex === -1 && currentDocOffset > chunkBaseOffset) {
-					// Try searching from baseOffset to see if it's behind us
-					const recoveryIndex = docText.indexOf(wordToFind, chunkBaseOffset);
-					if (recoveryIndex !== -1 && recoveryIndex < currentDocOffset) {
-						foundIndex = recoveryIndex;
-					} else {
-						// Try fuzzy recovery
-						const cleanWord = wordToFind.replace(/[.,;!?。，；！？、]/g, '');
-						if (cleanWord.length > 0) {
-							const fuzzyRecoveryIndex = docText.indexOf(cleanWord, chunkBaseOffset);
-							if (fuzzyRecoveryIndex !== -1 && fuzzyRecoveryIndex < currentDocOffset) {
-								foundIndex = fuzzyRecoveryIndex;
-							}
-						}
-					}
-				}
-
-				if (foundIndex !== -1) {
-					const from = foundIndex;
-
-					// Determine Length
-					// If we used map, we might know the exact length in raw text
-					// But we only got 'from'.
-					// Let's recalculate 'to'.
-
-					let matchLen = wordToFind.length;
-
-					// Use map to find 'to' if possible
-					if (currentMap && active.textOffset !== undefined) {
-						const endIdxInProcessed = active.textOffset + active.wordLength;
-						if (endIdxInProcessed < currentMap.length) {
-							const rawEnd = currentMap[endIdxInProcessed];
-							if (rawEnd !== undefined && rawEnd !== -1) {
-								const absEnd = chunkBaseOffset + rawEnd;
-								if (absEnd > from) {
-									matchLen = absEnd - from;
+							// Refine Map Result: 
+							// The map might point to a replaced prefix (e.g. "- " becoming space).
+							// If the text at the mapped location doesn't match, search forward slightly.
+							// Exception: If we are looking for "Link" placeholder, do not search (it won't match).
+							if (!wordToFind.includes('Link')) {
+								const checkLen = wordToFind.length;
+								const foundSlice = docText.substring(foundIndex, foundIndex + checkLen);
+								if (foundSlice !== wordToFind) {
+									// Try to find the exact word nearby
+									const REFINEMENT_WINDOW = 50;
+									const refinedIdx = findWordIndexInDoc({
+										docText,
+										wordToFind,
+										currentDocOffset: foundIndex, // Start search from the mapped location
+										chunkActualStart: chunkBaseOffset,
+										searchWindow: REFINEMENT_WINDOW
+									});
+									
+									if (refinedIdx !== -1) {
+										foundIndex = refinedIdx;
+									}
 								}
 							}
 						}
 					}
+				}
 
-					// Fallback length calculation
-					if (docText.substring(from, from + matchLen) !== wordToFind) {
-						const cleanWord = wordToFind.replace(/[.,;!?。，；！？、]/g, '');
-						if (docText.substring(from, from + cleanWord.length) === cleanWord) {
-							matchLen = cleanWord.length;
-						}
-					}
+				// Fallback Search
+				if (foundIndex === -1) {
+					const SEARCH_WINDOW = 500;
+					foundIndex = findWordIndexInDoc({
+						docText,
+						wordToFind,
+						currentDocOffset: this.currentDocOffset,
+						chunkActualStart,
+						searchWindow: SEARCH_WINDOW
+					});
+				}
 
-					const to = from + matchLen;
-					currentDocOffset = to;
+									if (foundIndex !== -1) {
+									const from = foundIndex;
+				
+									// Determine Length
+									// If we used map, we might know the exact length in raw text
+									// But we only got 'from'.
+									// Let's recalculate 'to'.
+				
+									let matchLen = wordToFind.length;
+				
+									// Use map to find 'to' if possible
+									// Use map to find 'to' if possible
+									if (currentMap && active.textOffset !== undefined) {
+										// Fix: Use the end of the LAST character of the word, rather than the start of the NEXT word.
+										// This prevents the highlight from including skipped text (like markdown syntax, URLs, etc) that lies between words.
+										const endIdxInProcessed = active.textOffset + active.wordLength;
+				
+										if (endIdxInProcessed > 0 && endIdxInProcessed <= currentMap.length) {
+											// Look at the last character of the spoken word
+											const lastCharRawStart = currentMap[endIdxInProcessed - 1];
+				
+											if (lastCharRawStart !== undefined && lastCharRawStart !== -1) {
+												const absEnd = chunkBaseOffset + lastCharRawStart + 1; // +1 assumes 1-unit increments in map correspond to 1 unit in string
+												if (absEnd > from) {
+													matchLen = absEnd - from;
+												}
+											}
+										}
+									}
+				
+									// Fallback length calculation
+									if (docText.substring(from, from + matchLen) !== wordToFind) {
+										const cleanWord = wordToFind.replace(/[.,;!?。，；！？、]/g, '');
+										if (docText.substring(from, from + cleanWord.length) === cleanWord) {
+											matchLen = cleanWord.length;
+										}
+									}
 
-					let highlightFrom = from;
-					let highlightTo = to;
+									// Special handling for "Link" placeholder
+									// If TTS says "Link" but doc has URL, expand matchLen to cover the URL
+									if (wordToFind.includes('Link')) {
+										// Check if document actually has a URL here
+										const potentialUrl = docText.substring(from);
+										const urlMatch = potentialUrl.match(/^(https?:\/\/[^\s,)]+)/);
+										if (urlMatch) {
+											matchLen = urlMatch[0].length;
+										}
+									}
+				
+									const to = from + matchLen;
+									
+									// Text Mismatch Check
+									const foundText = docText.substring(from, to);
+									// Normalize both for comparison (ignore whitespace/punctuation differences)
+									const normFound = foundText.replace(/\s+|[.,;!?。，；！？、]/g, '');
+									const normExpected = wordToFind.replace(/\s+|[.,;!?。，；！？、]/g, '');
+									
+									// If they differ significantly, log a warning
+									// Ignore mismatch if it's the "Link" placeholder case
+									if (normFound !== normExpected && !wordToFind.includes('Link')) {
+										void FileLogger.warn('Sync: Text Mismatch', {
+											expected: wordToFind,
+											found: foundText,
+											index: from,
+											chunk: active.chunkIndex
+										});
+									}
+				
+									this.currentDocOffset = to;
+				
+									let highlightFrom = from;					let highlightTo = to;
 
 					if (this.settings.highlightMode === 'sentence') {
 						// Expand to sentence boundaries WITHOUT creating large substrings
@@ -516,8 +640,23 @@ export default class VoxTrackPlugin extends Plugin {
 							view.dispatch(transaction);
 						}
 					}
+					// FileLogger.debug('Found Match (Sync)', {
+					// 	word: wordToFind,
+					// 	index: foundIndex,
+					// 	highlightFrom,
+					// 	highlightTo,
+					// 	docSubstring: docText.substring(highlightFrom, highlightTo),
+					// 	mapUsed: !!currentMap,
+					// 	chunkIndex: active.chunkIndex,
+					// 	audioTime: time
+					// });
 				} else {
-					// console.warn(`[VoxTrack] Sync: Could not find "${wordToFind}" after ${currentDocOffset} (base: ${chunkBaseOffset})`);
+					void FileLogger.warn(`Sync: Could not find "${wordToFind}"`, {
+						currentDocOffset: this.currentDocOffset,
+						chunkBase: chunkBaseOffset,
+						chunkActualStart: chunkActualStart,
+						searchWindow: 500
+					});
 				}
 			}
 
@@ -563,6 +702,9 @@ export default class VoxTrackPlugin extends Plugin {
 	private async processNextChunk(statusBar: HTMLElement) {
 		this.currentChunkIndex++;
 		this.chunkScanOffset = 0;
+		this.chunkTruncationOffset = 0;
+		this.recoveryTimeOffset = 0;
+		this.lastProcessedTextIndex = 0;
 		if (this.currentChunkIndex < this.textChunks.length) {
 			const nextText = this.textChunks[this.currentChunkIndex];
 			if (!nextText) return;
@@ -600,11 +742,193 @@ export default class VoxTrackPlugin extends Plugin {
 		// console.debug('[VoxTrack] Sending SSML:', ssml);
 
 		try {
-			await this.socket.sendSSML(ssml, uuidv4().replace(/-/g, ''));
+			// FileLogger.debug('Sending Chunk', { index: this.receivingChunkIndex, length: ssml.length, textLen: escapedText.length });
+			this.isReceivingData = true;
+			const requestId = uuidv4().replace(/-/g, '');
+			this.requestToChunkMap.set(requestId, this.receivingChunkIndex);
+			await this.socket.sendSSML(ssml, requestId);
 		} catch (error) {
-			console.error('[VoxTrack] Error sending Chunk:', error);
-			new Notice(t("Notice: Send Error"));
+			void FileLogger.warn('Send Error, triggering recovery', error);
+			void this.recoverConnection(statusBar);
+		}
+	}
+
+	private async recoverConnection(statusBar: HTMLElement) {
+		if (this.isRecovering) return;
+		this.isRecovering = true;
+
+		if (this.retryCount >= this.MAX_RETRIES) {
+			void FileLogger.error('Max retries reached. Stopping.');
+			new Notice(t("Notice: Connection lost"));
 			this.stopPlayback(statusBar);
+			this.isRecovering = false;
+			return;
+		}
+
+		this.retryCount++;
+		new Notice(`VoxTrack: Reconnecting... (${this.retryCount}/${this.MAX_RETRIES})`);
+
+		// Add backoff delay to allow network to settle
+		if (this.retryCount > 1) {
+			await new Promise(r => setTimeout(r, 1000 * this.retryCount));
+		}
+
+		try {
+			// 1. Calculate restart point
+			// Use player's last known time to find the exact metadata we were at.
+			// This is more reliable than lastProcessedTextIndex which relies on successful highlighs.
+			const interruptionTime = this.player.getCurrentTime();
+			let lastActiveItem = this.syncController.findActiveMetadata(interruptionTime);
+			
+			// Fallback: If no active item (e.g. silence), find closest preceding item
+			if (!lastActiveItem) {
+				lastActiveItem = this.syncController.findClosestMetadata(interruptionTime);
+			}
+
+			// Critical Fix: If we found metadata, trust its chunkIndex. 
+			// currentChunkIndex might have advanced if we were buffering the next chunk.
+			if (lastActiveItem && lastActiveItem.chunkIndex !== undefined) {
+				this.currentChunkIndex = lastActiveItem.chunkIndex;
+			}
+
+			// Critical Fix: Also sync receivingChunkIndex to ensure new requests map to the correct chunk
+			this.receivingChunkIndex = this.currentChunkIndex;
+
+			const currentText = this.textChunks[this.currentChunkIndex] || '';
+			let restartIndex = 0;
+			
+			// Determine the text index to scan backwards from
+			let scanStart = this.lastProcessedTextIndex;
+			if (lastActiveItem && lastActiveItem.textOffset !== undefined) {
+				scanStart = lastActiveItem.textOffset;
+			}
+			
+			if (scanStart > 0 && currentText) {
+				const lookbackText = currentText.substring(0, scanStart);
+				const terminators = /[.!?。！？\n]/;
+				const secondaryTerminators = /[,，;；]/;
+
+				let lastTerminator = -1;
+				let lastSecondaryTerminator = -1;
+				
+				// Find terminators
+				for (let i = lookbackText.length - 1; i >= 0; i--) {
+					const char = lookbackText[i];
+					// STRICTER CHECK: Terminator must be followed by whitespace or end of string (conceptually)
+					// to avoid splitting abbreviations like "node.js" or "v1.0".
+					// Since lookbackText ends at scanStart, we check characters relative to i inside lookbackText
+					// or we check the char AFTER i in the original currentText.
+					
+					const absoluteIndex = i; // Index in lookbackText (which starts at 0 of chunk)
+					const charAfter = currentText[absoluteIndex + 1];
+
+					if (terminators.test(char)) {
+						// Only treat as terminator if followed by whitespace/newline or if it's the end of text
+						if (!charAfter || /\s/.test(charAfter)) {
+							lastTerminator = i;
+							break;
+						}
+					}
+					if (lastSecondaryTerminator === -1 && secondaryTerminators.test(char)) {
+						// Secondary terminators (comma) logic can remain simpler or also check whitespace?
+						// Let's keep it simple for now or apply same logic?
+						// Usually comma followed by space.
+						if (!charAfter || /\s/.test(charAfter)) {
+							lastSecondaryTerminator = i;
+						}
+					}
+				}
+				
+				if (lastTerminator !== -1) {
+					// If primary terminator is close enough (<= 50 chars), use it.
+					// Otherwise, prefer secondary terminator to avoid long rewinds.
+					if ((scanStart - lastTerminator) <= 50) {
+						restartIndex = lastTerminator + 1;
+					} else if (lastSecondaryTerminator !== -1) {
+						restartIndex = lastSecondaryTerminator + 1;
+					} else {
+						restartIndex = lastTerminator + 1;
+					}
+				} else if (lastSecondaryTerminator !== -1) {
+					restartIndex = lastSecondaryTerminator + 1;
+				}
+			}
+
+			// Calculate relative start time for the restartIndex to align player timeline
+			let relativeStartTime = 0;
+			if (restartIndex > 0) {
+				const restartMetadata = this.syncController.findMetadataByTextOffset(restartIndex, this.currentChunkIndex);
+				if (restartMetadata) {
+					// restartMetadata.offset is ABSOLUTE time (ticks).
+					// We need RELATIVE time within the chunk (seconds).
+					// relative = (absolute - chunkStart) / 10^7
+					
+					const chunkStartTimeTicks = this.audioTimeOffset * 10000000;
+					relativeStartTime = (restartMetadata.offset - chunkStartTimeTicks) / 10000000.0;
+					
+					// Sanity check: relative time should be >= 0
+					if (relativeStartTime < 0) relativeStartTime = 0;
+				}
+			}
+			
+			this.recoveryTimeOffset = relativeStartTime; // Store for metadata adjustment
+
+			void FileLogger.debug('Recovery Logic', { 
+				interruptionTime, 
+				lastActiveText: lastActiveItem?.text, 
+				lastActiveOffset: lastActiveItem?.textOffset, 
+				scanStart, 
+				restartIndex,
+				relativeStartTime
+			});
+
+			// 2. Full reset player to current chunk start time + relative offset
+			// We reset buffer timeline to start at audioTimeOffset + relativeStartTime. 
+			// The new audio (which starts from restartIndex) will play starting from this time.
+			await this.player.restartAt(this.audioTimeOffset + this.recoveryTimeOffset);
+			
+			// 3. Clear metadata for the current chunk to avoid duplication/conflicts
+			this.syncController.removeChunk(this.currentChunkIndex);
+			
+			// 4. Set scan offset so metadata matching works on the Full Text
+			this.chunkScanOffsets[this.currentChunkIndex] = restartIndex;
+			this.lastProcessedTextIndex = restartIndex; // Reset tracking to restart point
+
+			// Reset currentDocOffset to align with restartIndex
+			// This prevents Fallback Search from searching past the restart point if Map Lookup fails
+			const currentMap = this.chunkMaps[this.currentChunkIndex];
+			if (currentMap && restartIndex < currentMap.length) {
+				const rawOffset = currentMap[restartIndex];
+				if (rawOffset !== undefined) {
+					this.currentDocOffset = this.baseOffset + rawOffset;
+				} else {
+					this.currentDocOffset = this.baseOffset;
+				}
+			} else {
+				this.currentDocOffset = this.baseOffset;
+			}
+
+			// 5. Reconnect
+			await this.socket.connect();
+
+			// 6. Resend partial chunk
+			if (currentText) {
+				const partialText = currentText.substring(restartIndex);
+				await this.sendChunk(partialText, statusBar);
+				void FileLogger.log('Recovery successful.');
+				this.retryCount = 0; // Reset on success
+			}
+		} catch (e) {
+			void FileLogger.error('Recovery failed', e);
+			// Do not stop here immediately, let the next trigger (or user) decide, 
+			// or maybe we should just stop if connect failed? 
+			// If connect failed, we probably can't do anything.
+			// But let's leave isRecovering = false so we can try again if triggered?
+			// No, if connect failed, we should probably stop.
+			new Notice(t("Notice: Connection lost"));
+			this.stopPlayback(statusBar);
+		} finally {
+			this.isRecovering = false;
 		}
 	}
 
@@ -630,33 +954,42 @@ export default class VoxTrackPlugin extends Plugin {
 			}
 		}
 
-		let rawText = '';
-		let startOffset = 0;
+		let processingText = '';
+		let baseDocOffset = 0;
+		let cursorTargetOffset = 0;
 
-		if (mode === 'cursor') {
-			const result = getTextFromCursor(editor);
-			rawText = result.text;
-			startOffset = result.offset;
+		const selection = getSelectedText(editor);
+
+		// Logic:
+		// 1. Auto mode with Selection -> Read Selection only (User intent is specific)
+		// 2. Cursor/Auto mode without Selection -> Read from Cursor/Start using Full Text context
+		if (mode === 'auto' && selection) {
+			processingText = selection.text;
+			baseDocOffset = selection.offset;
+			cursorTargetOffset = 0; // Start from beginning of selection
 		} else {
-			// Auto mode: Selection -> Full Note
-			const selection = getSelectedText(editor);
-			if (selection) {
-				rawText = selection.text;
-				startOffset = selection.offset;
+			const full = getFullText(editor);
+			processingText = full.text;
+			baseDocOffset = 0;
+
+			if (mode === 'cursor') {
+				const cursor = editor.getCursor('from');
+				cursorTargetOffset = editor.posToOffset(cursor);
 			} else {
-				const full = getFullText(editor);
-				rawText = full.text;
-				startOffset = full.offset;
+				cursorTargetOffset = 0; // Start from beginning
 			}
 		}
 
-		if (!rawText.trim()) {
+		if (!processingText.trim()) {
 			new Notice(t("Notice: No text"));
 			return;
 		}
 
 		this.textChunks = [];
 		this.chunkOffsets = [];
+		this.chunkMaps = []; // Reset maps
+		this.chunkScanOffsets = [];
+		this.requestToChunkMap.clear();
 		this.currentChunkIndex = 0;
 		this.receivingChunkIndex = 0;
 		this.activeMode = mode;
@@ -664,7 +997,7 @@ export default class VoxTrackPlugin extends Plugin {
 		const voice = this.settings.voice || 'zh-CN-XiaoxiaoNeural';
 		const lang = voice.startsWith('zh') ? 'zh-CN' : 'en-US';
 
-		const chunks = this.textProcessor.process(rawText, {
+		const chunks = this.textProcessor.process(processingText, {
 			filterCode: this.settings.filterCode,
 			filterLinks: this.settings.filterLinks,
 			filterMath: this.settings.filterMath,
@@ -678,16 +1011,45 @@ export default class VoxTrackPlugin extends Plugin {
 			return;
 		}
 
-		this.textChunks = chunks.map(c => c.text);
-		this.chunkMaps = chunks.map(c => c.map);
-		// Note: We fill all with startOffset because TrackedString.map contains the absolute index relative to the *original* text passed to it.
-		// Since we passed the text starting at startOffset, map values are relative to startOffset.
-		// So absPos = startOffset + map[i] is correct for ANY chunk.
-		this.chunkOffsets = new Array<number>(chunks.length).fill(startOffset);
+		// Slice chunks based on cursorTargetOffset
+		let foundStart = false;
+		for (const chunk of chunks) {
+			if (foundStart) {
+				this.textChunks.push(chunk.text);
+				this.chunkMaps.push(chunk.map);
+				this.chunkOffsets.push(baseDocOffset);
+				continue;
+			}
+
+			// Find if this chunk contains the start point
+			// We look for the first character in the chunk that maps to a position >= cursorTargetOffset
+			let sliceIndex = -1;
+			for (let i = 0; i < chunk.map.length; i++) {
+				if (chunk.map[i] >= cursorTargetOffset) {
+					sliceIndex = i;
+					foundStart = true;
+					break;
+				}
+			}
+
+			if (foundStart) {
+				const text = chunk.text.substring(sliceIndex);
+				const map = chunk.map.slice(sliceIndex);
+				if (text.length > 0) {
+					this.textChunks.push(text);
+					this.chunkMaps.push(map);
+					this.chunkOffsets.push(baseDocOffset);
+				}
+			}
+		}
+
+		if (this.textChunks.length === 0) {
+			new Notice(t("Notice: Filtered"));
+			return;
+		}
 
 		try {
 			this.player.reset();
-			await this.player.initSource();
 			this.player.setPlaybackRate(this.settings.playbackSpeed);
 
 			this.updateStatus(t("Status: Connecting"), false, false);
@@ -696,19 +1058,34 @@ export default class VoxTrackPlugin extends Plugin {
 			this.isPaused = false;
 			this.isTransferFinished = false;
 			this.hasShownReceivingNotice = false;
-			this.baseOffset = startOffset;
+			this.baseOffset = this.chunkOffsets[0] || 0; // Use first chunk's offset
+			this.currentDocOffset = this.baseOffset;
 			this.audioTimeOffset = 0;
-			this.chunkScanOffset = 0;
-
+			this.recoveryTimeOffset = 0;
+			this.chunkScanOffsets = new Array(this.textChunks.length).fill(0) as number[];
+			this.lastProcessedTextIndex = 0;
+	
 			this.setupDataHandler(statusBar);
-			await this.socket.connect();
+			
+			// Parallelize initialization to reduce startup latency
+			await Promise.all([
+				this.player.initSource().then(() => {
+					// Start playback state immediately after source is ready.
+					// The player will buffer until data arrives.
+					// We do NOT await play() here to avoid potential deadlocks if play() waits for data.
+					if (this.isPlaying && !this.isPaused) {
+						void this.player.play().catch(e => FileLogger.warn('[VoxTrack] Pre-play warning', e));
+					}
+				}),
+				this.socket.connect()
+			]);
+
 			if (!this.isPlaying) {
 				this.socket.close();
 				return;
 			}
 
 			if (this.textChunks.length > 0 && this.textChunks[0]) {
-				// console.debug('[VoxTrack] Processed Chunk 0 Text:', JSON.stringify(this.textChunks[0]));
 				await this.sendChunk(this.textChunks[0], statusBar);
 			}
 
@@ -717,19 +1094,25 @@ export default class VoxTrackPlugin extends Plugin {
 
 		} catch (e) {
 			const message = e instanceof Error ? e.message : 'Unknown error';
-			console.error('[VoxTrack] Playback Error:', e);
+			void FileLogger.error('Playback Error', e);
 			new Notice(`VoxTrack Error: ${message}`);
 			this.stopPlayback(statusBar);
 		}
 	}
 
 	private stopPlayback(statusBar?: HTMLElement) {
+		this.player.stop(); // Stop audio playback immediately
+		this.socket.close(); // Close connection to stop any pending data/metadata
 		this.isPlaying = false;
 		this.isPaused = false;
 		this.activeMode = null;
 		this.isTransferFinished = false;
 		this.lastHighlightFrom = -1;
 		this.lastHighlightTo = -1;
+		this.sessionManager.clear();
+		this.requestToChunkMap.clear();
+		if (this.syncInterval) cancelAnimationFrame(this.syncInterval);
+		this.syncController.reset();
 		if (this.activeEditor) {
 			const safeEditor = this.activeEditor as unknown as SafeEditor;
 			const view = safeEditor.cm || safeEditor.editor?.cm || safeEditor.view;
@@ -750,6 +1133,7 @@ export default class VoxTrackPlugin extends Plugin {
 		this.isTransferFinished = false;
 		this.lastHighlightFrom = -1;
 		this.lastHighlightTo = -1;
+		this.sessionManager.clear();
 		if (this.syncInterval) cancelAnimationFrame(this.syncInterval);
 		this.syncController.reset();
 

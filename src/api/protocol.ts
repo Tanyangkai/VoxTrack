@@ -4,7 +4,7 @@ export interface AudioMetadata {
     offset: number;
     duration: number;
     text: string;
-    textOffset: number;
+    textOffset?: number;
     wordLength: number;
     chunkIndex?: number;
 }
@@ -46,6 +46,21 @@ export interface EdgeMetadataItem {
 
 export interface EdgeResponse {
     Metadata?: EdgeMetadataItem[];
+}
+
+export function isJunkMetadata(text: string): boolean {
+    const rawText = text.toLowerCase();
+    
+    // SSML tags and fragments
+    const isTag = /[<>]/.test(rawText) ||
+        /^(prosody|voice|speak|speak|audio|mstts|phoneme|break|emphasis|say-as|sub|p|s|v|i|ce|od|os|pr|r)$/.test(rawText);
+        
+    // HTML entities and other TTS artifacts
+    const isArtifact = /^(gt|lt|amp|quot|apos|nbsp|;)$/.test(rawText) ||
+        /^&[a-z]+;?$/.test(rawText) ||
+        /^[/\\]/.test(rawText);
+        
+    return isTag || isArtifact;
 }
 
 export function parseMetadata(data: EdgeResponse): AudioMetadata[] {
@@ -92,25 +107,30 @@ export function parseMetadata(data: EdgeResponse): AudioMetadata[] {
 
             const word = (textObj.Text ?? textObj.text ?? textObj.Word ?? "") + "";
 
-            let textOffset = 0;
+            let textOffset: number | undefined;
             if (isFlat) {
                 // In flat structure, 'Offset' is Audio Offset. Only accept explicit TextOffset.
-                textOffset = textObj.TextOffset ?? textObj.textOffset ?? 0;
+                textOffset = textObj.TextOffset ?? textObj.textOffset;
             } else {
                 // In nested structure, 'Offset' is likely Text Offset relative to the phrase.
-                textOffset = textObj.Offset ?? textObj.offset ?? textObj.TextOffset ?? 0;
+                textOffset = textObj.Offset ?? textObj.offset ?? textObj.TextOffset;
             }
 
             const wordLength = textObj.Length ?? textObj.length ?? textObj.WordLength ?? word.length;
 
             if (word) {
-                results.push({
+                const metadata: AudioMetadata = {
                     offset: Number(audioOffset),
                     duration: Number(audioDuration),
                     text: word,
-                    textOffset: Number(textOffset),
                     wordLength: Number(wordLength)
-                });
+                };
+                
+                if (textOffset !== undefined) {
+                    metadata.textOffset = Number(textOffset);
+                }
+                
+                results.push(metadata);
             }
         }
     }

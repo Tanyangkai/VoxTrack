@@ -16,6 +16,7 @@ export interface VoxTrackSettings {
     filterObsidian: boolean;
     playbackSpeed: number;
     highlightColor: string;
+    engine: 'edge' | 'openai';
 }
 
 export const DEFAULT_SETTINGS: VoxTrackSettings = {
@@ -29,8 +30,10 @@ export const DEFAULT_SETTINGS: VoxTrackSettings = {
     filterCode: true,
     filterLinks: true,
     filterMath: true,
+
     filterFrontmatter: true,
-    filterObsidian: true
+    filterObsidian: true,
+    engine: 'edge'
 };
 
 export class VoxTrackSettingTab extends PluginSettingTab {

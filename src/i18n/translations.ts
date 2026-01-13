@@ -46,8 +46,8 @@ const translations = {
         "Auto scroll mode": "Auto scroll mode",
         "Auto scroll mode desc": "How the editor should follow the speech",
         "Auto scroll: Off": "Off",
-        "Auto scroll: Center": "Scroll only (Keep cursor)",
-        "Auto scroll: Cursor": "Scroll & Move Cursor (Recommended for LP Tables)",
+        "Auto scroll: Center": "Scroll only (keep cursor)",
+        "Auto scroll: Cursor": "Scroll & move cursor (recommended for LP tables)",
         "Highlight mode": "Highlight mode",
         "Highlight mode desc": "Visual tracking granularity",
         "Highlight mode: Word": "Word level",
@@ -60,7 +60,7 @@ const translations = {
         "Color: Blue": "Blue",
         "Color: Purple": "Purple",
         "Color: Red": "Red",
-        "Color: Default": "System Default",
+        "Color: Default": "System default",
     },
     zh: {
         // 状态栏 & 通知
@@ -124,8 +124,23 @@ const translations = {
     }
 };
 
+// @ts-ignore
 export const t = (key: keyof typeof translations.en): string => {
-    const lang = moment.locale();
+    let lang = 'en';
+    /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment */
+    try {
+        if (typeof moment !== 'undefined' && moment.locale) {
+            lang = moment.locale();
+        } else if (typeof window !== 'undefined' && (window as any).moment && (window as any).moment.locale) {
+            lang = (window as any).moment.locale();
+        } else if (typeof global !== 'undefined' && (global as any).moment && (global as any).moment.locale) {
+            lang = (global as any).moment.locale();
+        }
+    } catch {
+        // Fallback to en
+    }
+    /* eslint-enable */
+
     if (lang === "zh-cn" || lang === "zh") {
         return translations.zh[key] || translations.en[key];
     }

@@ -16,63 +16,70 @@ export class TrackedString {
      * Removes all occurrences matching the pattern.
      */
     remove(pattern: RegExp): void {
-        const matches: { index: number; length: number }[] = [];
-        // Ensure global flag to find all matches if intended, though loop handles it manually if sticky/global used correctly.
-        // Safer to construct a global regex if not provided, or use a loop with exec.
-        
-        const flags = pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g';
-        const regex = new RegExp(pattern.source, flags);
-        
-        let match;
-        while ((match = regex.exec(this.text)) !== null) {
-            matches.push({ index: match.index, length: match[0].length });
-        }
-
-        // Process from end to start to maintain indices
-        for (let i = matches.length - 1; i >= 0; i--) {
-            const matchItem = matches[i];
-            if (!matchItem) continue;
-            const { index, length } = matchItem;
-            this.text = this.text.slice(0, index) + this.text.slice(index + length);
-            this.map.splice(index, length);
-        }
+        this.replace(pattern, '');
     }
 
     /**
      * Replaces matches with a single character (e.g. '|' -> '\n').
-     * If replacement is longer than 1 char, it fills map with the index of the start of match.
+     * Or a string. All new characters map to the start index of the match.
      */
     replace(pattern: RegExp, replacement: string): void {
         const flags = pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g';
         const regex = new RegExp(pattern.source, flags);
         
-        const matches: { index: number; length: number; matchStr: string }[] = [];
+        // Find all matches first
+        const matches: { index: number; length: number }[] = [];
         let match;
+        // Reset lastIndex just in case
+        regex.lastIndex = 0;
+        
         while ((match = regex.exec(this.text)) !== null) {
-            matches.push({ index: match.index, length: match[0].length, matchStr: match[0] });
+            matches.push({ index: match.index, length: match[0].length });
+            // Safety check for zero-length matches to avoid infinite loop
+            if (match[0].length === 0) {
+                regex.lastIndex++;
+            }
         }
 
-        for (let i = matches.length - 1; i >= 0; i--) {
-            const matchItem = matches[i];
-            if (!matchItem) continue;
-            const { index, length } = matchItem;
-            
-            // Construct new text
-            // Note: replacement might depend on match if we supported that, but here we assume static string
-            // However, JS replace supports '$&' etc. We assume simple string for now as per TextProcessor needs.
-            
-            const head = this.text.slice(0, index);
-            const tail = this.text.slice(index + length);
-            this.text = head + replacement + tail;
+        if (matches.length === 0) return;
 
-            // Construct new map segment
-            // We map all new characters to the start index of the match (or we could distribute them)
-            const originIndex = this.map[index] ?? -1; 
-            const newMapSegment = new Array<number>(replacement.length).fill(originIndex);
+        let newText = "";
+        // Pre-allocate is hard because size changes, but dynamic array is fine in V8
+        const newMap: number[] = [];
+        let lastCursor = 0;
 
-            // Update map
-            this.map.splice(index, length, ...newMapSegment);
+        for (const m of matches) {
+            // 1. Copy content before match
+            if (m.index > lastCursor) {
+                newText += this.text.substring(lastCursor, m.index);
+                // Copy map segment
+                for (let i = lastCursor; i < m.index; i++) {
+                    newMap.push(this.map[i]);
+                }
+            }
+
+            // 2. Append replacement
+            if (replacement.length > 0) {
+                newText += replacement;
+                const originIndex = this.map[m.index] ?? -1;
+                for (let i = 0; i < replacement.length; i++) {
+                    newMap.push(originIndex);
+                }
+            }
+
+            lastCursor = m.index + m.length;
         }
+
+        // 3. Copy remaining tail
+        if (lastCursor < this.text.length) {
+            newText += this.text.substring(lastCursor);
+            for (let i = lastCursor; i < this.text.length; i++) {
+                newMap.push(this.map[i]);
+            }
+        }
+
+        this.text = newText;
+        this.map = newMap;
     }
 
     /**
@@ -84,8 +91,16 @@ export class TrackedString {
         const regex = new RegExp(pattern.source, flags);
         
         const matches: { index: number; length: number; group1: string; group1Index: number }[] = [];
+        regex.lastIndex = 0;
+
         let match;
         while ((match = regex.exec(this.text)) !== null) {
+            // Safety check
+            if (match[0].length === 0) {
+                regex.lastIndex++;
+                continue;
+            }
+
             if (match[1] !== undefined) {
                 const fullMatch = match[0];
                 const groupText = match[1];
@@ -119,20 +134,41 @@ export class TrackedString {
             }
         }
 
-        for (let i = matches.length - 1; i >= 0; i--) {
-            const matchItem = matches[i];
-            if (!matchItem) continue;
-            const { index, length, group1, group1Index } = matchItem;
-            
-            this.text = this.text.slice(0, index) + group1 + this.text.slice(index + length);
-            
-            // We need to keep the map segment corresponding to group1
-            // The map for the whole match is at this.map[index ... index+length]
-            // The map for group1 is at this.map[group1Index ... group1Index + group1.length]
-            
-            const groupMap = this.map.slice(group1Index, group1Index + group1.length);
-            this.map.splice(index, length, ...groupMap);
+        if (matches.length === 0) return;
+
+        let newText = "";
+        const newMap: number[] = [];
+        let lastCursor = 0;
+
+        for (const m of matches) {
+            // 1. Copy content before match
+            if (m.index > lastCursor) {
+                newText += this.text.substring(lastCursor, m.index);
+                for (let i = lastCursor; i < m.index; i++) {
+                    newMap.push(this.map[i]);
+                }
+            }
+
+            // 2. Append Group 1
+            newText += m.group1;
+            // Map for group1 comes from the original map at group1Index
+            for (let k = 0; k < m.group1.length; k++) {
+                newMap.push(this.map[m.group1Index + k]);
+            }
+
+            lastCursor = m.index + m.length;
         }
+
+        // 3. Copy tail
+        if (lastCursor < this.text.length) {
+            newText += this.text.substring(lastCursor);
+            for (let i = lastCursor; i < this.text.length; i++) {
+                newMap.push(this.map[i]);
+            }
+        }
+
+        this.text = newText;
+        this.map = newMap;
     }
 
     /**
@@ -145,6 +181,9 @@ export class TrackedString {
     }
 
     trim(): void {
+        if (typeof this.text !== 'string') {
+            this.text = String(this.text || '');
+        }
         const startMatch = this.text.match(/\S/);
         const start = startMatch ? startMatch.index! : 0;
         const endMatch = this.text.match(/\s*$/);

@@ -35,4 +35,21 @@ describe('SyncController', () => {
         const result = controller.findActiveMetadata(0.5);
         expect(result).toBeNull();
     });
+
+    test('removeChunk should only remove items for specific chunk', () => {
+        controller.addMetadata([
+            { offset: 20000000, duration: 10000000, text: "Chunk1Word", chunkIndex: 1, wordLength: 10 }
+        ]);
+        
+        // Before removal: has both
+        expect(controller.findActiveMetadata(0.5)?.text).toBe("Hello");
+        expect(controller.findActiveMetadata(2.5)?.text).toBe("Chunk1Word");
+
+        // Remove Chunk 0
+        controller.removeChunk(0);
+
+        // After removal: Chunk 0 is gone, Chunk 1 remains
+        expect(controller.findActiveMetadata(0.5)).toBeNull();
+        expect(controller.findActiveMetadata(2.5)?.text).toBe("Chunk1Word");
+    });
 });

@@ -1,3 +1,5 @@
+import { FileLogger } from '../utils/logger';
+
 export class AudioPlayer {
     private audio: HTMLAudioElement;
     private mediaSource: MediaSource | null = null;
@@ -8,6 +10,11 @@ export class AudioPlayer {
     private isStopped = false;
     private isInputFinished = false;
     private onCompleteCallback: (() => void) | null = null;
+    private isBufferFull = false;
+    private lastCleanupAttemptTime = -1;
+    private pendingSeekTime: number | null = null;
+
+    private playbackRate = 1.0;
 
     constructor() {
         this.audio = new Audio();
@@ -17,12 +24,79 @@ export class AudioPlayer {
         });
     }
 
+    private handleTimeUpdate = () => {
+        if (!this.isBufferFull) return;
+        
+        // Throttling: Check more frequently (every 0.2s) to clear buffer ASAP when stuck
+        if (Math.abs(this.audio.currentTime - this.lastCleanupAttemptTime) < 0.2) {
+            return;
+        }
+        
+        this.lastCleanupAttemptTime = this.audio.currentTime;
+
+        // Pass true to suppress warning because we expect it might fail repeatedly until time advances enough
+        if (this.cleanupBuffer(true, true)) {
+             // Success
+             this.isBufferFull = false;
+             this.audio.removeEventListener('timeupdate', this.handleTimeUpdate);
+             this.processQueue();
+        }
+    };
+
     onComplete(callback: () => void) {
         this.onCompleteCallback = callback;
     }
 
+    setPendingSeek(time: number) {
+        this.pendingSeekTime = time;
+    }
+
+    private checkPendingSeek() {
+        if (this.pendingSeekTime !== null && this.sourceBuffer && !this.sourceBuffer.updating) {
+            const buffered = this.sourceBuffer.buffered;
+            for (let i = 0; i < buffered.length; i++) {
+                const start = buffered.start(i);
+                const end = buffered.end(i);
+                // Check if the seek target is within a buffered range (with slight tolerance)
+                if (this.pendingSeekTime >= start && this.pendingSeekTime < end) {
+                    void FileLogger.debug(`[VoxTrack] Executing pending seek to ${this.pendingSeekTime} (Buffer: ${start}-${end})`);
+                    this.audio.currentTime = this.pendingSeekTime;
+                    this.pendingSeekTime = null;
+                    // If player state is logically 'playing', resume playback now that we've seeked
+                    if (this.isPlaying) {
+                         void this.play();
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
     setPlaybackRate(rate: number): void {
+        this.playbackRate = rate;
         this.audio.playbackRate = rate;
+    }
+
+    waitForQueueEmpty(timeoutMs = 5000): Promise<void> {
+        return new Promise((resolve) => {
+            const check = () => {
+                const isUpdating = this.sourceBuffer?.updating ?? false;
+                if (this.queue.length === 0 && !isUpdating) {
+                    resolve();
+                } else {
+                    // Poll or wait for event?
+                    // Since we processQueue on updateend, we can just poll for safety or hook into processQueue.
+                    // But polling is safer against missed events in complex state.
+                    // Let's us a simple polling with backoff or just re-check.
+                    // Actually, let's just use a one-off listener if updating, but valid check involves queue too.
+                    setTimeout(check, 50);
+                }
+            };
+            check();
+
+            // Timeout safety
+            setTimeout(() => resolve(), timeoutMs);
+        });
     }
 
     addChunk(data: Uint8Array) {
@@ -46,6 +120,9 @@ export class AudioPlayer {
             this.mediaSource.addEventListener('sourceopen', () => {
                 if (this.isStopped || !this.mediaSource) return;
 
+                // Re-apply playback rate because source reset might have cleared it
+                this.audio.playbackRate = this.playbackRate;
+
                 if (!this.sourceBuffer) {
                     try {
                         this.sourceBuffer = this.mediaSource.addSourceBuffer('audio/mpeg');
@@ -54,10 +131,10 @@ export class AudioPlayer {
                             if (!this.isStopped) this.processQueue();
                         });
                         this.sourceBuffer.addEventListener('error', (_e) => {
-                            console.error('[VoxTrack] SourceBuffer Error', _e);
+                            void FileLogger.error('[VoxTrack] SourceBuffer Error', _e);
                         });
                     } catch (e) {
-                        console.error('[VoxTrack] Failed to add SourceBuffer', e);
+                        void FileLogger.error('[VoxTrack] Failed to add SourceBuffer', e);
                     }
                 }
                 resolve();
@@ -70,6 +147,11 @@ export class AudioPlayer {
             return;
         }
 
+        this.checkPendingSeek();
+
+        // If buffer is full and we are waiting for time update, do not attempt to append
+        if (this.isBufferFull) return;
+
         if (this.queue.length > 0) {
             const chunk = this.queue[0];
             if (chunk) {
@@ -79,11 +161,21 @@ export class AudioPlayer {
                     this.queue.shift();
                 } catch (e) {
                     if (e instanceof Error && e.name === 'QuotaExceededError') {
-                        this.cleanupBuffer(true); // Force cleanup when buffer is full
+                        // Attempt to clean up buffer to free space.
+                        // If cleanup succeeds (returns true), 'updateend' event from remove() will trigger processQueue again.
+                        // We should NOT recursive call processQueue here.
+                        if (!this.cleanupBuffer(true)) {
+                             // Failed to cleanup immediately (e.g. no past data)
+                             if (!this.isBufferFull) {
+                                 this.isBufferFull = true;
+                                 this.audio.addEventListener('timeupdate', this.handleTimeUpdate);
+                             }
+                             // Stop processing until space is freed via handleTimeUpdate
+                        }
                     } else if (e instanceof Error && e.name === 'InvalidStateError') {
-                        console.debug('[VoxTrack] Append failed due to InvalidState');
+                        void FileLogger.debug('[VoxTrack] Append failed due to InvalidState');
                     } else {
-                        console.error('[VoxTrack] Append failed', e);
+                        void FileLogger.error('[VoxTrack] Append failed', e);
                         this.queue.shift();
                     }
                 }
@@ -97,8 +189,8 @@ export class AudioPlayer {
         }
     }
 
-    private cleanupBuffer(force = false) {
-        if (this.isStopped || !this.sourceBuffer || this.sourceBuffer.updating) return;
+    private cleanupBuffer(force = false, suppressWarning = false): boolean {
+        if (this.isStopped || !this.sourceBuffer || this.sourceBuffer.updating) return false;
 
         const currentTime = this.audio.currentTime;
         const buffered = this.sourceBuffer.buffered;
@@ -106,7 +198,7 @@ export class AudioPlayer {
         // Strategy: Keep 10 seconds behind current time if possible.
         // If force is true (QuotaExceeded), we must remove something to recover.
         let removeEnd = currentTime - 10;
-        
+
         if (buffered.length > 0) {
             const start = buffered.start(0);
             if (removeEnd < start) {
@@ -121,27 +213,37 @@ export class AudioPlayer {
             if (removeEnd > start) {
                 try {
                     this.sourceBuffer.remove(start, removeEnd);
+                    return true;
                 } catch (_e) {
-                    console.error('[VoxTrack] Buffer cleanup failed', _e);
+                    void FileLogger.error('[VoxTrack] Buffer cleanup failed', _e);
                     // Schedule a retry if we are stuck
                     setTimeout(() => {
                         if (!this.sourceBuffer?.updating) this.processQueue();
                     }, 1000);
+                    return false;
                 }
-            } else if (force) {
-                console.warn('[VoxTrack] Buffer full but cannot remove past data.');
+            } else if (force && !suppressWarning) {
+                void FileLogger.warn('[VoxTrack] Buffer full but cannot remove past data.');
             }
         }
+        return false;
     }
 
     async play(): Promise<void> {
-        if (this.isPlaying || this.isStopped) return;
+        if (this.isStopped) return;
+
+        // Mark intent to play
+        this.isPlaying = true;
+
+        // If pending seek, defer actual playback until seek is complete
+        if (this.pendingSeekTime !== null) {
+            return;
+        }
 
         try {
             await this.audio.play();
-            this.isPlaying = true;
         } catch (e) {
-            console.warn('[VoxTrack] Playback pending user interaction', e);
+            void FileLogger.warn('[VoxTrack] Playback pending user interaction', e);
         }
     }
 
@@ -163,6 +265,9 @@ export class AudioPlayer {
 
     stop(): void {
         this.isStopped = true;
+        this.isBufferFull = false;
+        this.audio.removeEventListener('timeupdate', this.handleTimeUpdate);
+        
         this.audio.pause();
         this.audio.removeAttribute('src');
         if (this.objectUrl) {
@@ -187,6 +292,37 @@ export class AudioPlayer {
         this.sourceBuffer = null;
         this.mediaSource = null;
         this.isInputFinished = false;
+    }
+
+    clearFutureBuffer(): void {
+        this.queue = []; // Clear pending chunks
+        if (this.sourceBuffer && !this.sourceBuffer.updating && this.mediaSource?.readyState === 'open') {
+            try {
+                const currentTime = this.audio.currentTime;
+                // Leave a tiny buffer (0.1s) to avoid stalling immediately if possible
+                const end = this.sourceBuffer.buffered.length > 0 ? this.sourceBuffer.buffered.end(this.sourceBuffer.buffered.length - 1) : 0;
+                if (end > currentTime + 0.1) {
+                    this.sourceBuffer.remove(currentTime + 0.1, end);
+                }
+            } catch (e) {
+                void FileLogger.warn('[VoxTrack] Failed to clear future buffer', e);
+            }
+        }
+        // Do NOT reset isInputFinished here blindly, it depends on context, but usually for retry we want to keep stream open.
+    }
+
+    async restartAt(time: number): Promise<void> {
+        // Full reset to ensure clean state
+        this.reset();
+        this.pendingSeekTime = null;
+        await this.initSource();
+        
+        // Align buffer and playhead to the chunk start time
+        if (this.sourceBuffer) {
+            this.sourceBuffer.timestampOffset = time;
+        }
+        this.audio.currentTime = time;
+        this.isStopped = false; // Ensure not stopped
     }
 
     destroy(): void {

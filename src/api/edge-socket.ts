@@ -1,19 +1,47 @@
 import { WebSocket, ClientOptions } from 'ws';
 import { v4 as uuidv4 } from 'uuid';
 import { EDGE_TTS_URL } from './protocol';
+import { FileLogger } from '../utils/logger';
 
 export class EdgeSocket {
     private ws: WebSocket | null = null;
     private onMessageCallback: ((data: string | Uint8Array) => void) | null = null;
-    private onCloseCallback: (() => void) | null = null;
+    private onCloseCallback: ((code?: number, reason?: string) => void) | null = null;
+    private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
     private readonly TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
 
     onMessage(callback: (data: string | Uint8Array) => void) {
         this.onMessageCallback = callback;
     }
 
-    onClose(callback: () => void) {
+    onClose(callback: (code?: number, reason?: string) => void) {
         this.onCloseCallback = callback;
+    }
+
+    private startHeartbeat() {
+        this.stopHeartbeat();
+        this.heartbeatTimer = setInterval(() => {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                // console.debug('[VoxTrack] Sending heartbeat...'); // Debug log
+                if (typeof this.ws.ping === 'function') {
+                    this.ws.ping();
+                } else {
+                    // Fallback for environments without ping (e.g. Native WebSocket)
+                    this.sendConfig();
+                }
+            }
+        }, 15000); // Send ping every 15 seconds to keep connection alive
+        
+        if (this.heartbeatTimer && typeof this.heartbeatTimer.unref === 'function') {
+            this.heartbeatTimer.unref();
+        }
+    }
+
+    private stopHeartbeat() {
+        if (this.heartbeatTimer) {
+            clearInterval(this.heartbeatTimer);
+            this.heartbeatTimer = null;
+        }
     }
 
     private async generateSecMsGec(): Promise<string> {
@@ -37,7 +65,7 @@ export class EdgeSocket {
         return date.toUTCString().replace("GMT", "GMT+0000 (Coordinated Universal Time)");
     }
 
-    async connect(retries = 3, delay = 1000): Promise<void> {
+    async connect(retries = 5, delay = 1000): Promise<void> {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             return Promise.resolve();
         }
@@ -58,6 +86,7 @@ export class EdgeSocket {
                     this.ws.binaryType = 'arraybuffer';
 
                     this.ws.onopen = () => {
+                        this.startHeartbeat();
                         this.sendConfig();
                         resolve();
                     };
@@ -76,13 +105,14 @@ export class EdgeSocket {
 
                     this.ws.onerror = (err) => {
                         void (async () => {
-                            console.error(`[VoxTrack] WebSocket Error (Retries left: ${retries})`, err);
+                            await FileLogger.error(`[VoxTrack] WebSocket Error (Retries left: ${retries})`, err);
 
                             if (retries > 0) {
                                 this.ws = null;
+                                const nextDelay = Math.min(delay * 2, 10000); // Cap at 10 seconds
                                 await new Promise(r => setTimeout(r, delay));
                                 try {
-                                    await this.connect(retries - 1, delay * 2);
+                                    await this.connect(retries - 1, nextDelay);
                                     resolve();
                                 } catch (e) {
                                     reject(e instanceof Error ? e : new Error(String(e)));
@@ -93,9 +123,10 @@ export class EdgeSocket {
                         })();
                     };
 
-                    this.ws.onclose = () => {
+                    this.ws.onclose = (ev: { code: number; reason: string }) => {
+                        this.stopHeartbeat();
                         if (this.onCloseCallback) {
-                            this.onCloseCallback();
+                            this.onCloseCallback(ev.code, ev.reason);
                         }
                         this.ws = null;
                     };
@@ -139,7 +170,12 @@ export class EdgeSocket {
     }
 
     close(): void {
+        this.stopHeartbeat();
         if (this.ws) {
+            // Nullify handlers to prevent pending events from firing after close()
+            this.ws.onmessage = null;
+            this.ws.onclose = null;
+            this.ws.onerror = null;
             this.ws.close();
             this.ws = null;
         }

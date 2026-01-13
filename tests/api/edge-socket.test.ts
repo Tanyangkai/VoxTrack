@@ -5,6 +5,7 @@ jest.mock('ws');
 
 interface MockWebSocket {
     send: jest.Mock;
+    ping: jest.Mock;
     close: jest.Mock;
     addEventListener: jest.Mock;
     on: jest.Mock;
@@ -36,6 +37,7 @@ describe('EdgeSocket', () => {
         // Setup the mock instance that WebSocket constructor will return
         mockWsInstance = {
             send: jest.fn(),
+            ping: jest.fn(),
             close: jest.fn(),
             addEventListener: jest.fn(),
             on: jest.fn(),

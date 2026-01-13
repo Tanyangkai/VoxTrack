@@ -27,34 +27,38 @@ export class TextProcessor {
         }
         if (options.filterCode) {
             ts.remove(/```[\s\S]*?```/);
-            ts.remove(/`[^`\n]+`/);
+            // ts.remove(/`[^`\n]+`/); // Do NOT remove inline code
         }
         if (options.filterMath) {
             ts.replace(/\$\$[\s\S]*?\$\$/g, ' ');
             ts.replace(/\$((?:\\\$|[^$\n])+?)\$/g, ' ');
         }
         if (options.filterObsidian) {
-            ts.remove(/>\s*\[!.*\][^\n]*\n/); // Callout headers
+            ts.remove(/>\s*\[!.\*\][^\n]*\n/); // Callout headers
             ts.remove(/%%[\s\S]*?%%/); // Comments
             ts.remove(/<!--[\s\S]*?-->/); // HTML Comments
             ts.remove(/<[a-zA-Z/][^>]*>/); // Generic HTML tags (like <br>, <div>)
-            ts.remove(/\^[\w-]+/); // Block IDs
+            ts.remove(/\^[[\w-\\]]+/); // Block IDs
         }
 
         // 2. Link Processing
         if (options.filterLinks) {
             // [text](url) -> text (Group 1)
-            ts.keepGroup1(/\[([^\]]+)\]\([^)]+\)/);
+            // Use [^)\n] to ensure we don't match across lines (which eats content if closing paren is missing)
+            ts.keepGroup1(/\[([^\]]+)\]\([^)\n]+\)/);
             // [[link|text]] -> text (Group 1 is what we want)
             ts.keepGroup1(/\[\[[^\]|]+\|([^\]]+)\]\]/);
             // [[link]] -> link (Group 1)
             ts.keepGroup1(/\[\[([^\]]+)\]\]/);
         } else {
             // Basic link cleanup even if keeping text
-            ts.keepGroup1(/\[([^\]]+)\]\([^)]+\)/);
+            ts.keepGroup1(/\[([^\]]+)\]\([^)\n]+\)/);
             ts.keepGroup1(/\[\[[^\]|]+\|([^\]]+)\]\]/);
             ts.keepGroup1(/\[\[([^\]]+)\]\]/);
         }
+
+        // Replace raw URLs with " Link " to prevent TTS mismatch
+        ts.replace(/https?:\/\/[^\s,)]+/g, ' Link ');
 
         // 3. Media Removal
         ts.remove(/!\[([^\]]*)\]\([^)]*\)/);
@@ -62,7 +66,7 @@ export class TextProcessor {
 
         // Remove Emoji
         // eslint-disable-next-line no-misleading-character-class -- Emoji ranges are complex and valid here
-        ts.remove(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F018}-\u{1F0F5}\u{1F200}-\u{1F270}\u{FE0F}]/u);
+        ts.remove(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F018}-\u{1F0F5}\u{1F200}-\u{1F270}\u{FE0F}\u{200D}]/u);
 
         // 4. Structure Cleanup
         // Specifically remove table separator rows before replacing pipes
@@ -72,14 +76,34 @@ export class TextProcessor {
         // Use comma to encourage continuous reading rather than newlines
         ts.replace(/\|/g, ', ');
 
-        // Formatting chars: * _ ` ~ -> space
-        ts.replace(/[*_`~]/g, ' ');
+        // Symbol Expansion (Read out symbols instead of skipping)
+        // This ensures TTS reads "plus" and Sync matches "plus" -> "+"
+        const isChinese = options.lang.startsWith('zh');
+        const symbols = [
+            { char: '+', en: ' plus ', zh: ' 加 ' },
+            { char: '=', en: ' equals ', zh: ' 等于 ' },
+            { char: '%', en: ' percent ', zh: ' 百分之 ' },
+            { char: '<', en: ' less than ', zh: ' 小于 ' },
+            { char: '>', en: ' greater than ', zh: ' 大于 ' }
+        ];
+
+        for (const s of symbols) {
+            const escaped = s.char.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            ts.replace(new RegExp(escaped, 'g'), isChinese ? s.zh : s.en);
+        }
+
+        // Formatting chars: * _ ~ ` -> space
+        // Note: We replace them with space to avoid TTS reading them literally.
+        ts.replace(/[*_~`]/g, ' ');
 
         // Headers/Quotes/List markers
         ts.replace(/^\s*[#>-]+\s*/gm, ' ');
 
         // Collapse multiple spaces to single space (helps with segmentation)
         ts.replace(/ +/g, ' ');
+
+        // Cleanup excessive punctuation (e.g. from empty table cells | | -> , ,)
+        ts.replace(/,(\s*,)+/g, ', ');
 
         // 7. Final Cleanup
         ts.replace(/\n{3,}/g, '\n\n');
@@ -90,7 +114,7 @@ export class TextProcessor {
         return this.chunk(ts);
     }
 
-    private chunk(ts: TrackedString, maxLen: number = 2500): ProcessedChunk[] {
+    private chunk(ts: TrackedString, maxLen: number = 300): ProcessedChunk[] {
         if (ts.length <= maxLen) return [{ text: ts.text, map: ts.map }];
 
         const chunks: ProcessedChunk[] = [];

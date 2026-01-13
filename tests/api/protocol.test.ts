@@ -1,6 +1,33 @@
-import { parseMetadata, EdgeResponse } from '../../src/api/protocol';
+import { parseMetadata, EdgeResponse, isJunkMetadata } from '../../src/api/protocol';
 
 describe('Protocol Layer', () => {
+    describe('isJunkMetadata', () => {
+        it('should identify SSML tags as junk', () => {
+            expect(isJunkMetadata("<speak>")).toBe(true);
+            expect(isJunkMetadata("prosody")).toBe(true);
+            expect(isJunkMetadata("voice")).toBe(true);
+            expect(isJunkMetadata("mstts")).toBe(true);
+        });
+
+        it('should identify HTML entities as junk', () => {
+            expect(isJunkMetadata("gt")).toBe(true);
+            expect(isJunkMetadata("&amp;")).toBe(true);
+            expect(isJunkMetadata("nbsp")).toBe(true);
+            expect(isJunkMetadata(";")).toBe(true);
+        });
+
+        it('should identify slashes and fragments as junk', () => {
+            expect(isJunkMetadata("/")).toBe(true);
+            expect(isJunkMetadata("\\")).toBe(true);
+        });
+
+        it('should identify legitimate words as NOT junk', () => {
+            expect(isJunkMetadata("Hello")).toBe(false);
+            expect(isJunkMetadata("世界")).toBe(false);
+            expect(isJunkMetadata("123")).toBe(false);
+        });
+    });
+
     describe('parseMetadata', () => {
         it('should parse valid Edge TTS WordBoundary event', () => {
             // Mock raw data from Edge TTS
@@ -85,6 +112,29 @@ describe('Protocol Layer', () => {
             if (result[0]) {
                 expect(result[0].textOffset).toBe(15);
             }
+        });
+
+        it('should handle missing textOffset by setting it to undefined (not 0)', () => {
+            const rawData: EdgeResponse = {
+                Metadata: [
+                    {
+                        Type: "WordBoundary",
+                        Data: {
+                            Offset: 1000,
+                            Duration: 100,
+                            text: {
+                                Text: "NoOffset",
+                                // TextOffset is missing here
+                                Length: 8
+                            }
+                        }
+                    }
+                ]
+            };
+
+            const result = parseMetadata(rawData);
+            expect(result).toHaveLength(1);
+            expect(result[0]?.textOffset).toBeUndefined();
         });
 
         it('should return empty array for irrelevant events', () => {

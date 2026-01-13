@@ -39,15 +39,17 @@ Content`;
     test('replaces symbols in English', () => {
         const input = '3 < 5 and a >= b';
         const result = processor.process(input, { ...defaultOptions, lang: 'en-US' });
-        // Now expecting symbols to be preserved, not replaced
-        expect(result[0]?.text).toContain('<');
-        expect(result[0]?.text).toContain('>=');
+        // Symbols should be replaced by space to avoid TTS reading them as words
+        expect(result[0]?.text).not.toContain('<');
+        expect(result[0]?.text).not.toContain('>=');
+        expect(result[0]?.text).toContain('3 less than 5 and a greater than equals b');
     });
 
     test('replaces symbols in Chinese', () => {
         const input = '3 < 5';
         const result = processor.process(input, { ...defaultOptions, lang: 'zh-CN' });
-        expect(result[0]?.text).toContain('<');
+        expect(result[0]?.text).not.toContain('<');
+        expect(result[0]?.text).toBe('3 小于 5');
     });
 
     test('chunks long text', () => {
@@ -115,7 +117,7 @@ Content`;
 
     test('repro: LaTeX formula mapping', () => {
 
-        const input = '你持有的 $H_{\\text{自命不凡}}$ 是一个错误算法。';
+        const input = '你持有的 $H_{\text{自命不凡}}$ 是一个错误算法。';
 
         const result = processor.process(input, defaultOptions);
 
@@ -144,7 +146,6 @@ Content`;
 
 
 
-
         // Check the word after the formula
 
 
@@ -158,19 +159,113 @@ Content`;
 
 
         if (originalPos !== undefined) {
-
-
-
             expect(input.substring(originalPos, originalPos + 3)).toBe('是一个');
-
-
-
         }
-
-
-
     });
 
+    test('handles special characters and maintains map integrity', () => {
+        const input = "> Quotation with & and | symbols.";
+        const result = processor.process(input, { ...defaultOptions, filterObsidian: true });
+        const chunk = result[0]!;
 
+        // Check "Quotation"
+        const qIdx = chunk.text.indexOf("Quotation");
+        expect(qIdx).not.toBe(-1);
+        // Original: "> Quotation..."
+        // Processed: " Quotation..." (Header replaced by space)
+        expect(chunk.map[qIdx]).toBe(2);
+
+        // Check "&"
+        const ampIdx = chunk.text.indexOf("&");
+        expect(ampIdx).not.toBe(-1);
+        expect(chunk.map[ampIdx]).toBe(17);
+
+        // Check "|" -> should become ", "
+        const commaIdx = chunk.text.indexOf(", ");
+        expect(commaIdx).not.toBe(-1);
+        expect(chunk.map[commaIdx]).toBe(23);
+    });
+
+    test('chunked text maps are relative to original input', () => {
+        // Default maxLen is 300. 
+        // We provide 300 'a's so it splits exactly at 300 (hard cut if no sentence boundary found in window).
+        // Then 'b's should form the second chunk.
+        const longText = 'a'.repeat(300) + 'b'.repeat(100);
+        const result = processor.process(longText, defaultOptions);
+
+        expect(result.length).toBeGreaterThan(1);
+
+        // First chunk
+        const firstChunk = result[0];
+        const secondChunk = result[1];
+
+        if (!firstChunk || !secondChunk) {
+            throw new Error("Expected 2 chunks");
+        }
+
+        expect(firstChunk.text.startsWith('a')).toBe(true);
+        expect(firstChunk.map[0]).toBe(0);
+
+        // Second chunk should be bbb...
+        // Original text index of start of second chunk
+        // 'a' * 1500 (length 1500)
+        // then ' ' (length 1)
+        // then 'b'
+        // So 'b' starts at 1501
+
+        expect(secondChunk.text.startsWith('b')).toBe(true);
+
+        const expectedIndex = longText.indexOf('b');
+        expect(secondChunk.map[0]).toBe(expectedIndex);
+    });
+
+    test('debug: deep inspection of mapping', () => {
+        const input = `
+# Debug Heading
+This is a test paragraph with **bold** text and a [link](http://example.com).
+It also has some chinese: 这里是中文测试，包含符号。
+
+> Blockquote with *italics* inside.
+`;
+
+        const result = processor.process(input, defaultOptions);
+
+        result.forEach((chunk, chunkIdx) => {
+        // console.log(`\n--- Chunk ${chunkIdx} ---`);
+        // console.log('Text:', chunk.text);
+        expect(chunk.text.length).toBeLessThanOrEqual(300);
+
+            // Log a sample of the map for verification
+            let mappingOutput = '';
+            for (let i = 0; i < chunk.text.length; i++) {
+                const char = chunk.text[i];
+                const originalIdx = chunk.map[i];
+                // Ensure safe access and log relevant mapping
+                if (char && char.trim().length > 0) {
+                    const originalChar = (originalIdx !== undefined) ? (input[originalIdx] || '?') : '?';
+                    mappingOutput += `'${char}'->${originalIdx} (${originalChar})\n`;
+                }
+            }
+            // console.log(mappingOutput); // Uncommented to see full mapping
+
+            // Check for monotonicity in map (indices should generally increase)
+            let lastIdx = -1;
+            for (let i = 0; i < chunk.map.length; i++) {
+                const currentIdx = chunk.map[i];
+                if (currentIdx !== undefined) {
+                    if (currentIdx < lastIdx) {
+                        console.warn(`Mapping regression at generated index ${i} ('${chunk.text[i]}'): ${currentIdx} < ${lastIdx}`);
+                    }
+                    lastIdx = currentIdx;
+                }
+            }
+        });
+
+        // Basic sanity checks
+        expect(result.length).toBeGreaterThan(0);
+        expect(result[0]?.text).toContain('Debug Heading');
+        expect(result[0]?.text).toContain('bold text');
+        expect(result[0]?.text).toContain('中文测试');
+    });
 
 });
