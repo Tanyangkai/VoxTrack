@@ -31,7 +31,7 @@ export class EdgeSocket {
                 }
             }
         }, 15000); // Send ping every 15 seconds to keep connection alive
-        
+
         if (this.heartbeatTimer && typeof this.heartbeatTimer.unref === 'function') {
             this.heartbeatTimer.unref();
         }
@@ -73,13 +73,13 @@ export class EdgeSocket {
         try {
             const uuid = uuidv4().replace(/-/g, '');
             const secMsGec = await this.generateSecMsGec();
-            const url = `${EDGE_TTS_URL}?TrustedClientToken=${this.TRUSTED_CLIENT_TOKEN}&ConnectionId=${uuid}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=1-130.0.2849.68`;
+            const url = `${EDGE_TTS_URL}?TrustedClientToken=${this.TRUSTED_CLIENT_TOKEN}&ConnectionId=${uuid}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=1-142.0.3595.157`;
 
             return new Promise((resolve, reject) => {
                 try {
                     this.ws = new WebSocket(url, {
                         headers: {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0',
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.3595.157',
                             'Origin': 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold'
                         }
                     } as ClientOptions);
