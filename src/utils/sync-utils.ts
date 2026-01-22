@@ -11,7 +11,6 @@ export interface SyncSearchParams {
  */
 export function findWordIndexInDoc(params: SyncSearchParams): number {
     const { docText, wordToFind, currentDocOffset, chunkActualStart, searchWindow } = params;
-    let foundIndex = -1;
 
     // Strategy 1: Direct search (forward)
     const forwardSearchStart = Math.max(currentDocOffset, chunkActualStart);

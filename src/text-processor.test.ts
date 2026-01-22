@@ -235,18 +235,9 @@ It also has some chinese: 这里是中文测试，包含符号。
         // console.log('Text:', chunk.text);
         expect(chunk.text.length).toBeLessThanOrEqual(300);
 
-            // Log a sample of the map for verification
-            let mappingOutput = '';
-            for (let i = 0; i < chunk.text.length; i++) {
-                const char = chunk.text[i];
-                const originalIdx = chunk.map[i];
-                // Ensure safe access and log relevant mapping
-                if (char && char.trim().length > 0) {
-                    const originalChar = (originalIdx !== undefined) ? (input[originalIdx] || '?') : '?';
-                    mappingOutput += `'${char}'->${originalIdx} (${originalChar})\n`;
-                }
-            }
-            // console.log(mappingOutput); // Uncommented to see full mapping
+                                    // Log a sample of the map for verification
+
+                                    // console.log(mappingOutput); // Uncommented to see full mapping
 
             // Check for monotonicity in map (indices should generally increase)
             let lastIdx = -1;

@@ -20,17 +20,6 @@ export function getSelectedText(editor: Editor): TextSelection | null {
 }
 
 /**
- * Gets text from the current cursor position to the end of the document.
- */
-export function getTextFromCursor(editor: Editor): TextSelection {
-    const from = editor.getCursor('from'); // Use 'from' in case there is a selection, we start from beginning of selection or cursor
-    const offset = editor.posToOffset(from);
-    const fullText = editor.getValue();
-    const text = fullText.substring(offset);
-    return { text, offset };
-}
-
-/**
  * Gets the full text of the document.
  */
 export function getFullText(editor: Editor): TextSelection {

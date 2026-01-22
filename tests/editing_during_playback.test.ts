@@ -28,7 +28,7 @@ jest.mock('uuid', () => ({ v4: jest.fn(() => 'test-uuid') }));
 // Use real sync-utils implicitly
 // jest.mock('../src/utils/sync-utils');
 
-(global as any).requestAnimationFrame = (cb: Function) => cb(); // Auto-run
+(global as any).requestAnimationFrame = (cb: (time: number) => void) => cb(0); // Auto-run with timestamp 0
 (global as any).cancelAnimationFrame = jest.fn();
 
 describe('Editing During Playback', () => {
@@ -38,9 +38,11 @@ describe('Editing During Playback', () => {
     let mockController: any;
     let mockEditor: any;
     let dispatchSpy: any;
+    let frameCallback: ((time: number) => void) | null;
 
     beforeEach(async () => {
         jest.clearAllMocks();
+        frameCallback = null;
         
         mockPlayer = {
             restartAt: jest.fn(),
@@ -172,7 +174,7 @@ describe('Editing During Playback', () => {
         });
         
         // Mock rAF on both global and window (if exists)
-        const mockRaf = jest.fn((cb: Function) => { 
+        const mockRaf = jest.fn((cb: (time: number) => void) => { 
             console.log('[Mock] rAF called');
             frameCallback = cb; 
             return 1; 
@@ -202,7 +204,7 @@ describe('Editing During Playback', () => {
         }
         
         // Expect one dispatch for "Target"
-        expect(frameCallback).toBeTruthy();
+        if (!frameCallback) throw new Error("frameCallback not set");
         
         // 2. Modify Document: Insert "NEW " at start
         const docTextModified = "NEW Start Target End";
@@ -212,7 +214,7 @@ describe('Editing During Playback', () => {
         // Plugin's map still says index 6.
         
         // Run loop
-        frameCallback!();
+        frameCallback(0);
         
         // Check dispatch
         const calls = dispatchSpy.mock.calls;
@@ -266,8 +268,7 @@ describe('Editing During Playback', () => {
             chunkIndex: 0
         });
 
-        let frameCallback: Function | null = null;
-        const mockRaf = jest.fn((cb: Function) => { 
+        const mockRaf = jest.fn((cb: (time: number) => void) => { 
             frameCallback = cb; 
             return 1; 
         });
@@ -287,8 +288,8 @@ describe('Editing During Playback', () => {
         mockEditor.getValue.mockReturnValue(docTextModified);
         
         // Run loop
-        expect(frameCallback).toBeTruthy();
-        frameCallback!();
+        if (!frameCallback) throw new Error("frameCallback not set");
+        frameCallback(0);
         
         // Expect Warning (Either "Could not find" or "Text Mismatch" depending on if it matched garbage)
         const logger = require('../src/utils/logger').FileLogger;

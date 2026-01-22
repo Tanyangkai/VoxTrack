@@ -94,7 +94,7 @@ describe('Startup Latency / Deadlock Prevention', () => {
         // or effectively takes forever. We can simulate this by returning a Promise that resolves after a long delay,
         // or we can just verify that sendChunk is called BEFORE play resolves.
         
-        let playResolve: Function;
+        let playResolve: (value?: unknown) => void;
         const playPromise = new Promise(r => { playResolve = r; });
         mockPlayer.play.mockReturnValue(playPromise);
 

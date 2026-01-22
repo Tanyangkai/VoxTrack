@@ -136,8 +136,8 @@ describe('Bug Repro: Highlight Jump on Recovery', () => {
         plugin.isPaused = false;
         plugin.activeEditor = mockEditor;
 
-        let loopCallback: Function | null = null;
-        (global as any).requestAnimationFrame = (cb: Function) => {
+        let loopCallback: ((time: number) => void) | null = null;
+        (global as any).requestAnimationFrame = (cb: (time: number) => void) => {
             loopCallback = cb;
             return 123;
         };

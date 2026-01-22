@@ -25,6 +25,10 @@
 		]
 	},
 	"include": [
-		"src/**/*.ts"
+		"src/**/*.ts",
+		"tests/**/*.ts",
+		"*.mjs",
+		"*.mts",
+		"*.cjs"
 	]
 }

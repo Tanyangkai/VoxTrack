@@ -9,6 +9,7 @@ export class EdgeSocket {
     private onCloseCallback: ((code?: number, reason?: string) => void) | null = null;
     private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
     private readonly TRUSTED_CLIENT_TOKEN = "6A5AA1D4EAFF4E9FB37E23D68491D6F4";
+    private isConnected: boolean = false;
 
     onMessage(callback: (data: string | Uint8Array) => void) {
         this.onMessageCallback = callback;
@@ -70,6 +71,8 @@ export class EdgeSocket {
             return Promise.resolve();
         }
 
+        this.isConnected = false;
+
         try {
             const uuid = uuidv4().replace(/-/g, '');
             const secMsGec = await this.generateSecMsGec();
@@ -86,6 +89,7 @@ export class EdgeSocket {
                     this.ws.binaryType = 'arraybuffer';
 
                     this.ws.onopen = () => {
+                        this.isConnected = true;
                         this.startHeartbeat();
                         this.sendConfig();
                         resolve();
@@ -105,7 +109,7 @@ export class EdgeSocket {
 
                     this.ws.onerror = (err) => {
                         void (async () => {
-                            await FileLogger.error(`[VoxTrack] WebSocket Error (Retries left: ${retries})`, err);
+                            FileLogger.error(`[VoxTrack] WebSocket Error (Retries left: ${retries})`, err);
 
                             if (retries > 0) {
                                 this.ws = null;
@@ -125,10 +129,11 @@ export class EdgeSocket {
 
                     this.ws.onclose = (ev: { code: number; reason: string }) => {
                         this.stopHeartbeat();
-                        if (this.onCloseCallback) {
+                        if (this.isConnected && this.onCloseCallback) {
                             this.onCloseCallback(ev.code, ev.reason);
                         }
                         this.ws = null;
+                        this.isConnected = false;
                     };
                 } catch (wsError) {
                     reject(wsError instanceof Error ? wsError : new Error(String(wsError)));

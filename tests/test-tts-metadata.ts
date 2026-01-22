@@ -98,7 +98,7 @@ async function runTest() {
                 // console.log("Binary Header:", header);
             }
         } else {
-            const text = data.toString();
+            const text = (data as Buffer).toString('utf-8');
             if (text.includes("Path:turn.end")) {
                 console.log("\nTurn End Received.");
                 console.log(`Total Audio Bytes: ${audioBytes}`);

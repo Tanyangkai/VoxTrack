@@ -10,7 +10,7 @@ import { voxTrackExtensions } from './editor/extensions';
 import { setActiveRange } from './editor/decorations';
 import { parseMetadata, EdgeResponse, AudioMetadata, isJunkMetadata } from './api/protocol';
 import { TextProcessor } from './text-processor';
-import { getSelectedText, getTextFromCursor, getFullText } from './utils/editor-utils';
+import { getSelectedText, getFullText } from './utils/editor-utils';
 import { findWordIndexInDoc, fuzzyIndexOf } from './utils/sync-utils';
 import { SessionManager } from './utils/session-utils';
 import { t } from './i18n/translations';
@@ -144,7 +144,6 @@ export default class VoxTrackPlugin extends Plugin {
 		this.addCommand({
 			id: 'play',
 			name: t("Command: Play/pause"),
-			hotkeys: [{ modifiers: ["Mod", "Shift"], key: "p" }],
 			editorCallback: (editor: Editor) => {
 				void (async () => {
 					try {
@@ -159,7 +158,6 @@ export default class VoxTrackPlugin extends Plugin {
 		this.addCommand({
 			id: 'read-from-cursor',
 			name: t("Command: Read from cursor"),
-			hotkeys: [{ modifiers: ["Mod", "Shift"], key: "r" }],
 			editorCallback: (editor: Editor) => {
 				void (async () => {
 					try {
@@ -174,7 +172,6 @@ export default class VoxTrackPlugin extends Plugin {
 		this.addCommand({
 			id: 'stop',
 			name: t("Command: Stop"),
-			hotkeys: [{ modifiers: ["Mod", "Shift"], key: "s" }],
 			editorCallback: () => {
 				this.stopPlayback(this.statusBarItemEl);
 			}
@@ -183,7 +180,6 @@ export default class VoxTrackPlugin extends Plugin {
 		this.addCommand({
 			id: 'locate',
 			name: t("Tooltip: Locate"),
-			hotkeys: [{ modifiers: ["Mod", "Shift"], key: "l" }],
 			callback: () => {
 				this.scrollToActive();
 			}

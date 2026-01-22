@@ -127,19 +127,28 @@ const translations = {
 // @ts-ignore
 export const t = (key: keyof typeof translations.en): string => {
     let lang = 'en';
-    /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment */
     try {
-        if (typeof moment !== 'undefined' && moment.locale) {
+        // Check for Obsidian's global moment
+        if (typeof moment !== 'undefined' && typeof moment.locale === 'function') {
             lang = moment.locale();
-        } else if (typeof window !== 'undefined' && (window as any).moment && (window as any).moment.locale) {
-            lang = (window as any).moment.locale();
-        } else if (typeof global !== 'undefined' && (global as any).moment && (global as any).moment.locale) {
-            lang = (global as any).moment.locale();
+        }
+        // Check for window.moment in browser environments
+        else if (typeof window !== 'undefined' && (window as { moment?: unknown }).moment) {
+            const windowMoment = (window as { moment: { locale: () => string } }).moment;
+            if (typeof windowMoment.locale === 'function') {
+                lang = windowMoment.locale();
+            }
+        }
+        // Check for global.moment in Node.js/test environments
+        else if (typeof global !== 'undefined' && (global as { moment?: unknown }).moment) {
+            const globalMoment = (global as { moment: { locale: () => string } }).moment;
+            if (typeof globalMoment.locale === 'function') {
+                lang = globalMoment.locale();
+            }
         }
     } catch {
-        // Fallback to en
+        // Fallback to 'en' if any access fails
     }
-    /* eslint-enable */
 
     if (lang === "zh-cn" || lang === "zh") {
         return translations.zh[key] || translations.en[key];

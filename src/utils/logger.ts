@@ -8,7 +8,7 @@ export class FileLogger {
         // No-op for compatibility
     }
 
-    public static async log(message: string, data?: unknown) {
+    public static log(message: string, data?: unknown) {
         if (!this.isEnabled) return;
         if (data !== undefined) {
             console.debug(`[VoxTrack] [INFO] ${message}`, data);
@@ -17,7 +17,7 @@ export class FileLogger {
         }
     }
 
-    public static async debug(message: string, data?: unknown) {
+    public static debug(message: string, data?: unknown) {
         if (!this.isEnabled) return;
         if (data !== undefined) {
             console.debug(`[VoxTrack] [DEBUG] ${message}`, data);
@@ -26,7 +26,7 @@ export class FileLogger {
         }
     }
 
-    public static async warn(message: string, data?: unknown) {
+    public static warn(message: string, data?: unknown) {
         if (!this.isEnabled) return;
         if (data !== undefined) {
             console.warn(`[VoxTrack] [WARN] ${message}`, data);
@@ -35,7 +35,7 @@ export class FileLogger {
         }
     }
 
-    public static async error(message: string, data?: unknown) {
+    public static error(message: string, data?: unknown) {
         if (!this.isEnabled) return;
         if (data !== undefined) {
             console.error(`[VoxTrack] [ERROR] ${message}`, data);

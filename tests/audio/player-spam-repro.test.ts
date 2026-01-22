@@ -191,7 +191,7 @@ describe('AudioPlayer Rapid Buffer Full Repro', () => {
         mockAudio.currentTime = 0.1;
 
         // Spy on FileLogger.warn
-        const warnSpy = jest.spyOn(FileLogger, 'warn').mockImplementation(() => Promise.resolve());
+        const warnSpy = jest.spyOn(FileLogger, 'warn').mockImplementation(() => {});
 
         // 2. Add chunk -> QuotaExceeded -> cleanupBuffer -> fails (returns false) -> sets isBufferFull -> adds timeupdate
         player.addChunk(new Uint8Array(100));

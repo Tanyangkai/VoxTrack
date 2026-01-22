@@ -1,5 +1,4 @@
 import { AudioMetadata } from '../api/protocol';
-import { FileLogger } from '../utils/logger';
 
 export class SyncController {
     private metadata: AudioMetadata[] = [];
