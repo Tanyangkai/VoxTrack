@@ -196,9 +196,6 @@ describe('AudioPlayer Race Condition', () => {
         await Promise.resolve(); // flush promises
 
         // Now it should be resolved
-        // @ts-ignore
-        // expect(resolved).toBe(true); // Wait, promises need await. 
-
         await waitPromise;
         expect(player.getBufferedEnd()).toBe(1);
 

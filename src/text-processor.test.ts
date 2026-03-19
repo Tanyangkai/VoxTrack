@@ -237,7 +237,7 @@ It also has some chinese: 这里是中文测试，包含符号。
 
                                     // Log a sample of the map for verification
 
-                                    // console.log(mappingOutput); // Uncommented to see full mapping
+                                    
 
             // Check for monotonicity in map (indices should generally increase)
             let lastIdx = -1;

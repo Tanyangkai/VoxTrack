@@ -124,7 +124,7 @@ const translations = {
     }
 };
 
-// @ts-ignore
+// @ts-ignore -- Partial implementation for compatibility checks
 export const t = (key: keyof typeof translations.en): string => {
     let lang = 'en';
     try {
