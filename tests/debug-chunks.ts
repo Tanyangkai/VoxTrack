@@ -27,7 +27,7 @@ const chunks = processor.process(text, {
 console.log(`Total Chunks: ${chunks.length}`);
 
 for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
+    const chunk = chunks[i]!;
     console.log(`\n=== Chunk ${i} ===`);
     console.log(`Text Length: ${chunk.text.length}`);
     console.log(`Text Content (Start): ${chunk.text.substring(0, 50)}...`);

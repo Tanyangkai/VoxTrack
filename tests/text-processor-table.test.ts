@@ -33,12 +33,12 @@ describe('TextProcessor Table Handling', () => {
         });
 
         // Debug output to see what is actually produced
-        console.log('Processed Table Text:', chunks[0].text);
+        console.log('Processed Table Text:', chunks[0]!.text);
 
         // Expectation: The text should not be riddled with commas for every cell boundary
         // We prefer spaces or single commas
 
-        const processedText = chunks[0].text;
+        const processedText = chunks[0]!.text;
 
         // Assert that we don't have double commas or comma-space-comma sequences
         expect(processedText).not.toMatch(/, ,/);
@@ -60,9 +60,9 @@ describe('TextProcessor Table Handling', () => {
             lang: 'zh-CN'
         });
 
-        console.log('Processed Empty Cells:', chunks[0].text);
+        console.log('Processed Empty Cells:', chunks[0]!.text);
 
         // Should not produce ", , , "
-        expect(chunks[0].text).not.toMatch(/,(\s*),/);
+        expect(chunks[0]!.text).not.toMatch(/,(\s*),/);
     });
 });

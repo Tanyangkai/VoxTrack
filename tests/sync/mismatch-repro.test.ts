@@ -31,7 +31,7 @@ describe('Sync Mismatch Reproduction', () => {
         // 1. Process text
         const chunks = processor.process(input, defaultOptions);
         const processedText = chunks.map(c => c.text).join('');
-        const processedMap = chunks[0].map; // Assuming single chunk for short text
+        const processedMap = chunks[0]!.map; // Assuming single chunk for short text
 
         // console.log('Original Length:', input.length);
         // console.log('Processed Length:', processedText.length);
@@ -49,7 +49,7 @@ describe('Sync Mismatch Reproduction', () => {
         expect(processedIndex).not.toBe(-1);
         
         const originalIndex = processedMap[processedIndex];
-        const originalChar = input[originalIndex];
+        const originalChar = input[originalIndex!];
         
         // console.log(`Mapped '/' at ${processedIndex} to original index ${originalIndex}, char: '${originalChar}'`);
         
@@ -64,6 +64,6 @@ describe('Sync Mismatch Reproduction', () => {
         const oIndex2 = processedMap[pIndex2];
         // console.log(`Mapped '其中' at ${pIndex2} to original index ${oIndex2}, char: '${input.substring(oIndex2, oIndex2+2)}'`);
         
-        expect(input.substring(oIndex2, oIndex2+2)).toBe("其中");
+        expect(input.substring(oIndex2!, oIndex2! + 2)).toBe("其中");
     });
 });

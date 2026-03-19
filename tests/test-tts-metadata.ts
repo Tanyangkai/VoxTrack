@@ -108,7 +108,10 @@ async function runTest() {
                 process.exit(0);
             } else if (text.includes("Path:audio.metadata")) {
                 // Parse Metadata
-                const jsonStr = text.split("\r\n\r\n")[1];
+                const parts = text.split("\r\n\r\n");
+                const jsonStr = parts[1];
+                if (!jsonStr) return;
+
                 try {
                     const json = JSON.parse(jsonStr);
                     if (json.Metadata) {

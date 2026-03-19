@@ -20,7 +20,7 @@ describe('TextProcessor Header Filtering', () => {
     it('should remove markdown header symbols (#) from processed text', () => {
         const input = "### 操作符";
         const chunks = processor.process(input, defaultOptions);
-        const processedText = chunks[0].text;
+        const processedText = chunks[0]!.text;
 
         // We expect the '#' symbols to be removed or replaced by space.
         // If TTS reads "Hashtag Hashtag Hashtag", it means they are present.

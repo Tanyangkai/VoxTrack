@@ -10,9 +10,9 @@ describe('SyncController - Comprehensive Edge Cases', () => {
 
     test('Overlap Resolution: should always prefer the highest chunk index at a given time', () => {
         controller.addMetadata([
-            { offset: 1000, duration: 1000, text: "Chunk0_End", chunkIndex: 0 },
-            { offset: 1500, duration: 1000, text: "Chunk1_Start", chunkIndex: 1 },
-            { offset: 1800, duration: 1000, text: "Chunk2_Early", chunkIndex: 2 }
+            { offset: 1000, duration: 1000, text: "Chunk0_End", chunkIndex: 0, wordLength: 0 },
+            { offset: 1500, duration: 1000, text: "Chunk1_Start", chunkIndex: 1, wordLength: 0 },
+            { offset: 1800, duration: 1000, text: "Chunk2_Early", chunkIndex: 2, wordLength: 0 }
         ]);
 
         // At 1.9ms (19000000 ticks)
@@ -27,8 +27,8 @@ describe('SyncController - Comprehensive Edge Cases', () => {
 
     test('Monotonicity: should reject old chunks even if time jitters significantly', () => {
         controller.addMetadata([
-            { offset: 10000000, duration: 10000000, text: "A", chunkIndex: 0 },
-            { offset: 20000000, duration: 10000000, text: "B", chunkIndex: 1 }
+            { offset: 10000000, duration: 10000000, text: "A", chunkIndex: 0, wordLength: 1 },
+            { offset: 20000000, duration: 10000000, text: "B", chunkIndex: 1, wordLength: 1 }
         ]);
 
         controller.findActiveMetadata(2.5); // B (Chunk 1)
@@ -39,20 +39,20 @@ describe('SyncController - Comprehensive Edge Cases', () => {
     });
 
     test('Reset logic: should clear monotonicity tracker', () => {
-        controller.addMetadata([{ offset: 1000, duration: 1000, chunkIndex: 5 }]);
+        controller.addMetadata([{ offset: 1000, duration: 1000, text: "X", chunkIndex: 5, wordLength: 1 }]);
         controller.findActiveMetadata(0.00015); // Sets lastChunkIndex to 5
         
         controller.reset();
         
-        controller.addMetadata([{ offset: 1000, duration: 1000, chunkIndex: 0 }]);
+        controller.addMetadata([{ offset: 1000, duration: 1000, text: "Y", chunkIndex: 0, wordLength: 1 }]);
         const res = controller.findActiveMetadata(0.00015);
         expect(res?.chunkIndex).toBe(0); // Should be allowed now
     });
 
     test('Stuck time: should return the same advanced candidate consistently', () => {
         controller.addMetadata([
-            { offset: 100, duration: 200, text: "A", chunkIndex: 1 },
-            { offset: 100, duration: 200, text: "B", chunkIndex: 2 }
+            { offset: 100, duration: 200, text: "A", chunkIndex: 1, wordLength: 1 },
+            { offset: 100, duration: 200, text: "B", chunkIndex: 2, wordLength: 1 }
         ]);
         
         const first = controller.findActiveMetadata(0.000015); 
@@ -64,8 +64,8 @@ describe('SyncController - Comprehensive Edge Cases', () => {
 
     test('Out of order metadata addition: should still find correct items via binary search (sorted)', () => {
         // Add out of order
-        controller.addMetadata([{ offset: 2000, duration: 100, text: "Later", chunkIndex: 1 }]);
-        controller.addMetadata([{ offset: 1000, duration: 100, text: "Earlier", chunkIndex: 0 }]);
+        controller.addMetadata([{ offset: 2000, duration: 100, text: "Later", chunkIndex: 1, wordLength: 5 }]);
+        controller.addMetadata([{ offset: 1000, duration: 100, text: "Earlier", chunkIndex: 0, wordLength: 7 }]);
         
         const res = controller.findActiveMetadata(0.000105);
         expect(res?.text).toBe("Earlier");

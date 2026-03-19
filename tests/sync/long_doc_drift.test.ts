@@ -25,7 +25,7 @@ describe('Long Document Drift & Mismatch Reproduction', () => {
         const count = 1000;
         const input = "|".repeat(count) + "Magic";
         const result = processor.process(input, defaultOptions);
-        const chunk = result[0];
+        const chunk = result[0]!;
         
         const magicIndex = chunk.text.indexOf("Magic");
         expect(magicIndex).not.toBe(-1);
@@ -43,7 +43,7 @@ describe('Long Document Drift & Mismatch Reproduction', () => {
         const count = 100;
         const input = block.repeat(count) + "Magic";
         const result = processor.process(input, defaultOptions);
-        const chunk = result[0];
+        const chunk = result[0]!;
         
         expect(chunk.text.trim()).toBe("Magic");
         const mapValue = chunk.map[chunk.text.indexOf("Magic")];
@@ -77,7 +77,7 @@ describe('Long Document Drift & Mismatch Reproduction', () => {
         
         const input = "````\n```\ninner\n```\n````\nMagic";
         const result = processor.process(input, defaultOptions);
-        const chunk = result[0];
+        const chunk = result[0]!;
         
         const magicIdx = chunk.text.indexOf("Magic");
         expect(magicIdx).not.toBe(-1);
@@ -99,7 +99,7 @@ describe('Long Document Drift & Mismatch Reproduction', () => {
         // "Start " (6) + Emoji + " End" (4)
         
         const result = processor.process(input, defaultOptions);
-        const chunk = result[0];
+        const chunk = result[0]!;
         
         expect(chunk.text).toBe("Start End"); // Emoji removed, double space collapsed to 1
         
@@ -133,16 +133,13 @@ Magic
         
         const inputWithCode = `
 Text
-\
-\
-json
-{\"key\": \"value\" }
-\
-\
+\`\`\`json
+{"key": "value" }
+\`\`\`
 Magic
 `;
         const result = processor.process(inputWithCode, defaultOptions);
-        const chunk = result[0];
+        const chunk = result[0]!;
         
         const magicIdx = chunk.text.indexOf("Magic");
         expect(magicIdx).not.toBe(-1);
@@ -164,18 +161,15 @@ Header 1
 
 Some text with [Link](http://url) and **Bold**.
 
-\
-\
-javascript
+\`\`\`javascript
 console.log("Code");
-\
-\
+\`\`\`
 
 More text.
 Final Word.`;
 
         const result = processor.process(input, defaultOptions);
-        const chunk = result[0];
+        const chunk = result[0]!;
         
         // "Final"
         const finalIdx = chunk.text.indexOf("Final");

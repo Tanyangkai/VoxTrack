@@ -97,9 +97,9 @@ r = random.randrange(1, 1000)
 
         // Detailed Chunk Analysis
         for (let i = 0; i < chunks.length; i++) {
-            console.log(`Chunk ${i} length: ${chunks[i].text.length}`);
-            console.log(`Chunk ${i} start text: ${chunks[i].text.substring(0, 20)}...`);
-            console.log(`Chunk ${i} end text: ...${chunks[i].text.substring(chunks[i].text.length - 20)}`);
+            console.log(`Chunk ${i} length: ${chunks[i]!.text.length}`);
+            console.log(`Chunk ${i} start text: ${chunks[i]!.text.substring(0, 20)}...`);
+            console.log(`Chunk ${i} end text: ...${chunks[i]!.text.substring(chunks[i]!.text.length - 20)}`);
         }
     });
 });

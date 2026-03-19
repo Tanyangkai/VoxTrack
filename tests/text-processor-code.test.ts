@@ -31,14 +31,14 @@ describe('TextProcessor - Inline Code Handling', () => {
         // Backticks are replaced by space.
         // " + " is preserved.
         
-        console.log('Processed:', chunk.text);
+        console.log('Processed:', chunk!.text);
         
         // Check if "shift" is present
-        expect(chunk.text).toContain("shift");
+        expect(chunk!.text).toContain("shift");
         
         // Check map for "shift"
-        const shiftIdx = chunk.text.indexOf("shift");
-        const mapVal = chunk.map[shiftIdx];
+        const shiftIdx = chunk!.text.indexOf("shift");
+        const mapVal = chunk!.map[shiftIdx];
         const expected = input.indexOf("shift");
         
         expect(mapVal).toBe(expected);
@@ -53,15 +53,15 @@ describe('TextProcessor - Inline Code Handling', () => {
         
         // Test Chinese Expansion
         const resCN = processor.process(input, { ...defaultOptions, lang: 'zh-CN' });
-        expect(resCN[0].text).toContain("shift 加 enter");
+        expect(resCN[0]!.text).toContain("shift 加 enter");
         
         // Check Map: "加" should point to "+"
-        const jiaIdx = resCN[0].text.indexOf("加");
+        const jiaIdx = resCN[0]!.text.indexOf("加");
         const plusIdx = input.indexOf("+");
-        expect(resCN[0].map[jiaIdx]).toBe(plusIdx);
+        expect(resCN[0]!.map[jiaIdx]).toBe(plusIdx);
 
         // Test English Expansion
         const resEN = processor.process(input, { ...defaultOptions, lang: 'en-US' });
-        expect(resEN[0].text).toContain("shift plus enter");
+        expect(resEN[0]!.text).toContain("shift plus enter");
     });
 });

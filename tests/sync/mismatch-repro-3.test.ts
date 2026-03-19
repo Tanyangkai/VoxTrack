@@ -20,8 +20,8 @@ describe('Sync Mismatch Reproduction 3 - Detailed Mapping', () => {
         // Use simple string to debug test harness
         const input = "其中 `+` 和 `-`";
         const chunks = processor.process(input, defaultOptions);
-        const processedText = chunks[0].text;
-        const map = chunks[0].map;
+        const processedText = chunks[0]!.text;
+        const map = chunks[0]!.map;
         
         console.log('Input:', input);
         console.log('Processed:', processedText);
@@ -53,13 +53,13 @@ describe('Sync Mismatch Reproduction 3 - Detailed Mapping', () => {
         
         const heIndex = processedText.indexOf('和');
         expect(heIndex).not.toBe(-1);
-        expect(map[heIndex]).toBe(7);
+        expect(map[heIndex]!).toBe(7);
         
         // And `-` should be preserved?
         // Original: `-` at 9.
         // Processed: `-` at 5.
         const dashIndex = processedText.indexOf('-');
         expect(dashIndex).not.toBe(-1);
-        expect(map[dashIndex]).toBe(10);
+        expect(map[dashIndex]!).toBe(10);
     });
 });

@@ -54,7 +54,7 @@ describe('Content Based Reproduction of Highlighting Jump', () => {
         let chunkIndex = -1;
 
         for (let i = 0; i < chunks.length; i++) {
-            if (chunks[i].text.includes(targetSentence)) {
+            if (chunks[i]!.text.includes(targetSentence)) {
                 foundChunk = chunks[i];
                 chunkIndex = i;
                 break;
@@ -66,14 +66,14 @@ describe('Content Based Reproduction of Highlighting Jump', () => {
         // Check text content in the processor output
         // "编程既不是文科也不是理科…… 它更像是"
         // Processor might replace "……" with space or similar.
-        console.log('Processed Chunk Text:', foundChunk.text);
+        console.log('Processed Chunk Text:', foundChunk!.text);
 
         // Verify mapping back to original text
-        const processedIndex = foundChunk.text.indexOf("它更像是");
+        const processedIndex = foundChunk!.text.indexOf("它更像是");
         expect(processedIndex).toBeGreaterThan(-1);
 
-        const originalOffset = foundChunk.map[processedIndex];
-        const originalTextSegment = FULL_TEXT.substring(originalOffset, originalOffset + 5); // "它更像是" has length 4
+        const originalOffset = foundChunk!.map[processedIndex];
+        const originalTextSegment = FULL_TEXT.substring(originalOffset!, originalOffset! + 5); // "它更像是" has length 4
         expect(originalTextSegment).toContain("它更像是");
     });
 

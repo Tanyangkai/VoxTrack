@@ -1,5 +1,5 @@
 import { SyncController } from '../../src/sync/controller';
-import { AudioMetadata } from '../src/api/protocol';
+import { AudioMetadata } from '../../src/api/protocol';
 
 describe('Sync Logic - Chunk Overlap and Early Transition', () => {
     let controller: SyncController;

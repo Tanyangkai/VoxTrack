@@ -186,7 +186,7 @@ describe('Operation Switching & Cache Interference', () => {
         // 1. Start Session A
         await triggerPlay("Session A Text");
         expect(plugin.isPlaying).toBe(true);
-        const sessionA_ID = (uuidv4 as jest.Mock).mock.results[0].value; // captured during setupDataHandler? 
+        const sessionA_ID = (uuidv4 as jest.Mock).mock.results[0]!.value; // captured during setupDataHandler? 
         // Note: uuid is called multiple times (setupDataHandler, sendChunk requestID).
         
         // Simulate receiving metadata for A

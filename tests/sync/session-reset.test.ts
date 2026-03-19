@@ -9,7 +9,8 @@ describe('SyncController Session Reset', () => {
             offset: 0, 
             duration: 10000000, // 1s
             text: 'OldWord', 
-            chunkIndex: 0 
+            chunkIndex: 0,
+            wordLength: 7
         }]);
 
         // Verify Session 1
@@ -23,7 +24,8 @@ describe('SyncController Session Reset', () => {
             offset: 0, 
             duration: 10000000, // 1s
             text: 'NewWord', 
-            chunkIndex: 0 
+            chunkIndex: 0,
+            wordLength: 7
         }]);
 
         // Current behavior with BUG: 

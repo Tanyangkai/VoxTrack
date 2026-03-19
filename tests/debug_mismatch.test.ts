@@ -24,7 +24,7 @@ describe('Debug Mismatch Logic', () => {
             lang: 'zh-CN'
         });
         
-        const chunk = chunks[0];
+        const chunk = chunks[0]!;
         console.log(`Processed Text: '${chunk.text}'`);
         
         // Find "风格"

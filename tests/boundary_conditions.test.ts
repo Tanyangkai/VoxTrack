@@ -219,8 +219,8 @@ describe('Boundary Conditions & Stress Tests', () => {
         expect(mockPlayer.reset).toHaveBeenCalled(); 
         expect(mockPlayer.initSource).toHaveBeenCalled();
         console.log('plugin.textChunks.length:', plugin.textChunks.length);
-        if (Notice.mock.calls.length > 0) {
-             console.log('Notices:', Notice.mock.calls);
+        if ((Notice as any).mock.calls.length > 0) {
+             console.log('Notices:', (Notice as any).mock.calls);
         }
         
         expect(plugin.isPlaying).toBe(true);

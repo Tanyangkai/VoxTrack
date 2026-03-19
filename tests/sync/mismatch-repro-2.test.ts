@@ -29,7 +29,7 @@ describe('Sync Mismatch Reproduction 2', () => {
 
         const chunks = processor.process(input, defaultOptions);
         const processedText = chunks.map(c => c.text).join('');
-        const processedMap = chunks[0].map;
+        const processedMap = chunks[0]!.map;
 
         // Log analysis from user:
         // Expected: "+", Found: "："
@@ -51,7 +51,7 @@ describe('Sync Mismatch Reproduction 2', () => {
             // console.log(`Original text context: "${input.substring(oIndex-2, oIndex+3)}"`);
             
             // If the bug exists, this might be true:
-            // expect(input[oIndex]).toBe('：'); 
+            // expect(input[oIndex!]).toBe('：'); 
         }
         
         // However, the previous test PASSED, meaning my manual mapping check was correct.

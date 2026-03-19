@@ -54,7 +54,7 @@ describe('Long Document Verification (500KB+)', () => {
         let foundChunkIndex = -1;
         let foundMarkerIndex = -1;
         for (let i = result.length - 1; i >= 0; i--) {
-            const idx = result[i].text.indexOf(marker);
+            const idx = result[i]!.text.indexOf(marker);
             if (idx !== -1) {
                 foundChunkIndex = i;
                 foundMarkerIndex = idx;
@@ -63,7 +63,7 @@ describe('Long Document Verification (500KB+)', () => {
         }
         
         if (foundChunkIndex === -1) {
-            console.log('Last Chunk Text:', result[result.length - 1].text);
+            console.log('Last Chunk Text:', result[result.length - 1]!.text);
             console.log('Second Last Chunk Text:', result[result.length - 2]?.text);
         } else {
             console.log(`Marker found in chunk ${foundChunkIndex} (Total: ${result.length})`);
@@ -71,14 +71,14 @@ describe('Long Document Verification (500KB+)', () => {
 
         expect(foundChunkIndex).not.toBe(-1);
         
-        const targetChunk = result[foundChunkIndex];
-        const mappedIndex = targetChunk.map[foundMarkerIndex];
+        const targetChunk = result[foundChunkIndex]!;
+        const mappedIndex = targetChunk.map[foundMarkerIndex]!;
         const expectedIndex = content.indexOf(marker);
         
         expect(mappedIndex).toBe(expectedIndex);
         
         if (result.length > 10) {
-            const midChunk = result[Math.floor(result.length / 2)];
+            const midChunk = result[Math.floor(result.length / 2)]!;
             if (midChunk.text.length > 20) {
                 const sampleText = midChunk.text.substring(10, 20);
                 const sampleMapStart = midChunk.map[10];
@@ -102,12 +102,12 @@ test('Real File: 自学是门手艺.md', () => {
             const result = processor.process(content, defaultOptions);
             console.log(`Generated ${result.length} chunks for document length ${content.length}`);
             
-            const lastChunk = result[result.length - 1];
+            const lastChunk = result[result.length - 1]!;
             const lastText = lastChunk.text.trim();
             if (lastText.length > 5) {
                 const tail = lastText.substring(lastText.length - 5);
                 const idx = lastText.lastIndexOf(tail);
-                const rawIdx = lastChunk.map[idx];
+                const rawIdx = lastChunk.map[idx]!;
                 
                 expect(rawIdx).toBeLessThan(content.length);
             }

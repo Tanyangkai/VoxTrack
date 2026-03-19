@@ -25,7 +25,7 @@ describe('Slice Map Logic', () => {
         for (const chunk of chunks) {
             let sliceIndex = -1;
             for (let i = 0; i < chunk.map.length; i++) {
-                if (chunk.map[i] >= cursor) {
+                if (chunk.map[i]! >= cursor) {
                     sliceIndex = i;
                     foundStart = true;
                     break;
@@ -42,21 +42,21 @@ describe('Slice Map Logic', () => {
         
         // Verify Slice
         expect(textChunks.length).toBe(1);
-        expect(textChunks[0]).toContain("需要朗读的内容");
-        expect(textChunks[0]).not.toContain("前面的内容");
+        expect(textChunks[0]!).toContain("需要朗读的内容");
+        expect(textChunks[0]!).not.toContain("前面的内容");
         
         // Verify Map
-        const firstChar = textChunks[0][0]; // "需"
-        const firstMap = chunkMaps[0][0];   // Should point to "需" in doc
+        const firstChar = textChunks[0]![0]; // "需"
+        const firstMap = chunkMaps[0]![0];   // Should point to "需" in doc
         
         expect(firstChar).toBe("需");
-        expect(doc[firstMap]).toBe("需");
+        expect(doc[firstMap!]).toBe("需");
         expect(firstMap).toBe(cursor);
         
         // Simulate SyncController Lookup
         const textOffset = 0;
-        const rawStart = chunkMaps[0][textOffset];
-        const absStart = 0 + rawStart; // chunkBaseOffset is 0
+        const rawStart = chunkMaps[0]![textOffset];
+        const absStart = 0 + rawStart!; // chunkBaseOffset is 0
         
         expect(absStart).toBe(cursor);
     });
